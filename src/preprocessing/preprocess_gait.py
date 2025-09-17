@@ -26,18 +26,37 @@ except Exception:
 
 EPS = 1e-8
 
-def csv_to_xy_array(csv_path):
+def csv_to_xy_array(csv_path, video_name=None):
     """
     Read a single csv from extract_gait.py and return numpy (T, L, 2) for (x,y).
+    If video_name is provided, filter for that specific video from the combined CSV.
     """
     df = pd.read_csv(csv_path)
+    
+    # If video_name is provided, filter the dataframe for that specific video
+    if video_name is not None and 'video_name' in df.columns:
+        df = df[df['video_name'] == video_name].copy()
+        if len(df) == 0:
+            raise ValueError(f"No data found for video: {video_name}")
+        # Reset frame numbers to start from 1
+        df = df.reset_index(drop=True)
+    
     cols = df.columns.tolist()
-    # find how many landmarks: (total_columns - 1) / 4  (frame + x,y,z,vis per landmark)
-    n_landmarks = int((len(cols) - 1) / 4)
+    
+    # Handle both old format (frame only) and new format (video_name, frame)
+    if 'video_name' in cols:
+        # New format: video_name, frame, x_0, y_0, z_0, vis_0, ...
+        n_landmarks = int((len(cols) - 2) / 4)  # subtract 2 for video_name and frame
+    else:
+        # Old format: frame, x_0, y_0, z_0, vis_0, ...
+        n_landmarks = int((len(cols) - 1) / 4)  # subtract 1 for frame only
+    
     xs = [f"x_{i}" for i in range(n_landmarks)]
     ys = [f"y_{i}" for i in range(n_landmarks)]
+    
     if not set(xs).issubset(cols) or not set(ys).issubset(cols):
         raise ValueError(f"CSV {csv_path} doesn't have expected x_i/y_i columns.")
+    
     x_arr = df[xs].values  # (T, L)
     y_arr = df[ys].values  # (T, L)
     T = x_arr.shape[0]
@@ -190,6 +209,9 @@ def infer_label_from_filename(path):
     return label
 
 def build_dataset_from_glob(input_glob, out_dir, target_frames=64, include_angles=True):
+    """
+    Original function for processing multiple separate CSV files using glob patterns.
+    """
     files = sorted(glob.glob(input_glob))
     if len(files) == 0:
         raise RuntimeError(f"No files matched: {input_glob}")
@@ -225,19 +247,108 @@ def build_dataset_from_glob(input_glob, out_dir, target_frames=64, include_angle
         json.dump(label_map, f, indent=2)
     print(f"[DONE] Saved X.npy ({X.shape}), y.npy ({y.shape}), labels.json -> {out_dir}")
 
+def get_video_names_from_csv(csv_path):
+    """
+    Get all unique video names from a combined CSV file.
+    Returns empty list if no video_name column exists.
+    """
+    df = pd.read_csv(csv_path)
+    if 'video_name' in df.columns:
+        return df['video_name'].unique().tolist()
+    else:
+        return []
+
+def build_dataset_from_combined_csv(csv_path, out_dir, target_frames=64, include_angles=True):
+    """
+    Build dataset from a single combined CSV file containing multiple videos.
+    Each video becomes a separate sample.
+    """
+    print(f"[INFO] Processing combined CSV: {csv_path}")
+    
+    # Get all video names from the CSV
+    video_names = get_video_names_from_csv(csv_path)
+    
+    if not video_names:
+        raise ValueError(f"No video_name column found in {csv_path}. Use build_dataset_from_glob for single video CSVs.")
+    
+    print(f"[INFO] Found {len(video_names)} videos: {video_names}")
+    
+    X_list = []
+    y_list = []
+    label_map = {}
+    next_label = 0
+    
+    for video_name in video_names:
+        print(f"[INFO] Processing video: {video_name}")
+        try:
+            arr = csv_to_xy_array(csv_path, video_name=video_name)  # (T, L, 2)
+            print(f"[INFO] Video {video_name}: {arr.shape[0]} frames, {arr.shape[1]} landmarks")
+        except Exception as e:
+            print(f"[WARN] Skipping video {video_name} due to error: {e}")
+            continue
+            
+        feat = sequence_to_feature_matrix(arr, include_angles=include_angles, target_frames=target_frames)  # (T, D)
+        
+        # Use video name as label
+        label_name = video_name
+        if label_name not in label_map:
+            label_map[label_name] = next_label
+            next_label += 1
+        label_id = label_map[label_name]
+        
+        X_list.append(feat)     # (T, D)
+        y_list.append(label_id)
+        print(f"[INFO] Video {video_name} -> label {label_id}, feature shape: {feat.shape}")
+    
+    if not X_list:
+        raise RuntimeError("No valid videos processed!")
+    
+    X = np.stack(X_list, axis=0)  # (N, T, D)
+    y = np.array(y_list, dtype=np.int64)
+    
+    os.makedirs(out_dir, exist_ok=True)
+    np.save(os.path.join(out_dir, "X.npy"), X)
+    np.save(os.path.join(out_dir, "y.npy"), y)
+    with open(os.path.join(out_dir, "labels.json"), "w") as f:
+        json.dump(label_map, f, indent=2)
+    
+    print(f"[DONE] Saved X.npy ({X.shape}), y.npy ({y.shape}), labels.json -> {out_dir}")
+    print(f"[INFO] Label mapping: {label_map}")
+    return X, y, label_map
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_glob", type=str, default="data/*.csv",
-                        help="glob for input gait CSVs (created by extract_gait.py)")
+    parser.add_argument("--input_glob", type=str, default="data/gait_keypoints.csv",
+                        help="glob for input gait CSVs or path to combined CSV file")
     parser.add_argument("--out_dir", type=str, default="data/processed",
                         help="directory to save X.npy,y.npy,labels.json")
     parser.add_argument("--target_frames", type=int, default=64,
                         help="resample each sequence to this many frames")
     parser.add_argument("--no_angles", action="store_true",
                         help="disable computing joint angles (faster)")
+    parser.add_argument("--force_glob", action="store_true",
+                        help="force using glob pattern matching instead of combined CSV")
     args = parser.parse_args()
 
     include_angles = not args.no_angles
+    
+    # Check if input is a single file and contains video_name column (combined CSV)
+    if not args.force_glob and not ('*' in args.input_glob or '?' in args.input_glob):
+        if os.path.isfile(args.input_glob):
+            try:
+                # Check if it's a combined CSV with video_name column
+                df_test = pd.read_csv(args.input_glob)
+                if 'video_name' in df_test.columns:
+                    print(f"[INFO] Detected combined CSV format with video_name column")
+                    build_dataset_from_combined_csv(args.input_glob, args.out_dir,
+                                                   target_frames=args.target_frames,
+                                                   include_angles=include_angles)
+                    return
+            except Exception as e:
+                print(f"[WARN] Could not read as combined CSV: {e}")
+    
+    # Fall back to glob pattern matching for multiple files
+    print(f"[INFO] Using glob pattern matching for: {args.input_glob}")
     build_dataset_from_glob(args.input_glob, args.out_dir,
                             target_frames=args.target_frames,
                             include_angles=include_angles)

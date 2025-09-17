@@ -1,0 +1,10 @@
+{
+  "model_type": "K-Neighbors",
+  "accuracy": 0.6666666666666666,
+  "timestamp": "20250917_163045",
+  "feature_shape": 4480,
+  "labels": {
+    "0": "Authentic",
+    "1": "Deepfake"
+  }
+}
