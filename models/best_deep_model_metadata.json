@@ -1,0 +1,17 @@
+{
+  "model_type": "LSTM",
+  "model_path": "models\\LSTM_20250917_164301.h5",
+  "scaler_path": null,
+  "timestamp": "20250917_164301",
+  "metrics": {
+    "test_loss": 0.48304226994514465,
+    "test_accuracy": 1.0,
+    "test_precision": 1.0,
+    "test_recall": 1.0,
+    "test_f1": 0.999999995,
+    "test_auc": NaN
+  },
+  "sequence_length": 64,
+  "num_features": 70,
+  "tensorflow_version": "2.18.0"
+}

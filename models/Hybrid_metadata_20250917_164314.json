@@ -1,0 +1,17 @@
+{
+  "model_type": "Hybrid",
+  "model_path": "models\\Hybrid_20250917_164314.h5",
+  "scaler_path": null,
+  "timestamp": "20250917_164314",
+  "metrics": {
+    "test_loss": 0.21816976368427277,
+    "test_accuracy": 1.0,
+    "test_precision": 1.0,
+    "test_recall": 1.0,
+    "test_f1": 0.999999995,
+    "test_auc": NaN
+  },
+  "sequence_length": 64,
+  "num_features": 70,
+  "tensorflow_version": "2.18.0"
+}
