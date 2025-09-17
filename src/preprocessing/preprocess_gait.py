@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Preprocess gait keypoint CSVs into fixed-length feature arrays for training.
 
