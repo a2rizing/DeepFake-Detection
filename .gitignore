@@ -68,16 +68,31 @@ Thumbs.db
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
 
-# Data files (uncomment if you don't want to track data)
-# data/processed/
-# data/visualizations/
+# Video files (too large for Git)
+*.mp4
+*.avi
+*.mov
+*.mkv
+data/*.mp4
+data/*.avi
 
-# Model files
+# Large data files
+data/processed/X.npy
+data/processed/y.npy
+data/gait_keypoints.csv
+
+# Model files (can be regenerated)
 *.pkl
 *.joblib
 *.h5
 *.pth
 *.pt
+models/saved/*.pkl
+
+# Keep visualizations and metadata (small files)
+!data/processed/labels.json
+!data/processed/metadata.json
+!models/saved/metadata.json
 
 # Temporary files
 *.tmp
