@@ -98,3 +98,20 @@ models/saved/*.pkl
 *.tmp
 *.temp
 *~
+
+# Report-related documentation (personal notes, not code)
+GEN_AI_RESEARCH_PROMPT.md
+REPORT_OUTPUTS.md
+REPORT_QUICK_START.md
+ALL_CHANGES_COMPLETE.md
+CURRENT_OUTPUTS.md
+FOR_SUPERVISOR.md
+PRESENTATION_GUIDE.md
+QUICK_START.md
+SETUP_GUIDE.md
+START_HERE.md
+
+# Keep project documentation (important for understanding code)
+!README.md
+!PROJECT_ROADMAP.md
+!CURRENT_PROJECT_STATUS.md
