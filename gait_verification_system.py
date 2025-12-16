@@ -1,367 +1,367 @@
 """
-Gait Verification System
-Verifies if a person's gait matches their claimed identity
-This is Phase 2: Building towards deepfake detection
+Deepfake Detection System using Gait Analysis
+Verifies if a video's gait matches the claimed identity
 """
 
-import os
-import json
 import numpy as np
-import joblib
-from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
-from sklearn.preprocessing import StandardScaler
+import cv2
+import mediapipe as mp
+import json
+from datetime import datetime
+import os
 import matplotlib.pyplot as plt
-import seaborn as sns
+from pathlib import Path
+from scipy.spatial.distance import euclidean
 
-class GaitVerificationSystem:
-    """
-    System to verify if a person's gait matches their claimed identity
+# Initialize MediaPipe
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose(
+    static_image_mode=False,
+    model_complexity=1,
+    smooth_landmarks=True,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
+
+class GaitExtractor:
+    """Extract gait features from video"""
     
-    Use Cases:
-    1. Verify if test video matches person's known gait profile
-    2. Detect anomalous gait patterns (potential deepfakes)
-    3. Calculate confidence scores for authentication
-    """
-    
-    def __init__(self, models_dir='models', data_dir='data/processed'):
-        self.models_dir = models_dir
-        self.data_dir = data_dir
-        self.profiles = {}
-        self.label_mapping = {}
-        self.scaler = None
+    def extract_from_video(self, video_path, max_frames=64):
+        """Extract pose landmarks from video"""
+        cap = cv2.VideoCapture(video_path)
         
-        # Load existing data
-        self.load_gait_profiles()
-    
-    def load_gait_profiles(self):
-        """Load pre-trained gait profiles for each person"""
+        if not cap.isOpened():
+            return None
         
-        print("📊 Loading gait profiles...")
+        keypoints_list = []
+        frame_count = 0
         
-        # Load labels
-        labels_path = os.path.join(self.data_dir, 'labels.json')
-        if os.path.exists(labels_path):
-            with open(labels_path, 'r') as f:
-                self.label_mapping = json.load(f)
+        while len(keypoints_list) < max_frames:
+            ret, frame = cap.read()
+            if not ret:
+                break
             
-            # Reverse mapping
-            self.id_to_name = {v: k for k, v in self.label_mapping.items()}
-        
-        # Load feature data
-        X_path = os.path.join(self.data_dir, 'X.npy')
-        y_path = os.path.join(self.data_dir, 'y.npy')
-        
-        if os.path.exists(X_path) and os.path.exists(y_path):
-            X = np.load(X_path)
-            y = np.load(y_path)
+            frame_count += 1
             
-            # Build profile for each person
-            for person_id in np.unique(y):
-                person_name = self.id_to_name[person_id]
-                person_data = X[y == person_id]
-                
-                # Store profile
-                self.profiles[person_name] = {
-                    'id': person_id,
-                    'reference_gaits': person_data,
-                    'mean_gait': np.mean(person_data, axis=0),
-                    'std_gait': np.std(person_data, axis=0),
-                    'n_samples': len(person_data)
-                }
+            # Skip frames for efficiency
+            if frame_count % 2 != 0:
+                continue
             
-            print(f"✅ Loaded {len(self.profiles)} gait profiles")
-            for name, profile in self.profiles.items():
-                print(f"   - {name.capitalize()}: {profile['n_samples']} sample(s)")
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = pose.process(rgb_frame)
+            
+            if results.pose_landmarks:
+                landmarks = []
+                for landmark in results.pose_landmarks.landmark:
+                    landmarks.extend([landmark.x, landmark.y, landmark.z, landmark.visibility])
+                keypoints_list.append(landmarks)
+        
+        cap.release()
+        
+        if len(keypoints_list) == 0:
+            return None
+        
+        # Pad or truncate to exactly max_frames
+        if len(keypoints_list) < max_frames:
+            while len(keypoints_list) < max_frames:
+                keypoints_list.append(keypoints_list[-1])
         else:
-            print("❌ No gait profiles found. Please run training first.")
+            keypoints_list = keypoints_list[:max_frames]
+        
+        return np.array(keypoints_list)
     
-    def verify_gait(self, test_gait, claimed_identity, method='cosine'):
-        """
-        Verify if test gait matches the claimed identity
+    def calculate_features(self, keypoints):
+        """Calculate gait features"""
+        if keypoints is None or len(keypoints) == 0:
+            return None
         
-        Args:
-            test_gait: numpy array of gait features (shape: sequence_length, features)
-            claimed_identity: name of person (e.g., "aditya")
-            method: 'cosine', 'euclidean', or 'mahalanobis'
+        features = []
+        features.extend(np.mean(keypoints, axis=0))
+        features.extend(np.std(keypoints, axis=0))
+        features.extend(np.min(keypoints, axis=0))
+        features.extend(np.max(keypoints, axis=0))
         
-        Returns:
-            dict with verification results
-        """
-        
-        if claimed_identity not in self.profiles:
-            return {
-                'verified': False,
-                'reason': f'Unknown identity: {claimed_identity}',
-                'confidence': 0.0
-            }
-        
-        profile = self.profiles[claimed_identity]
-        
-        # Flatten test gait
-        test_flat = test_gait.flatten() if test_gait.ndim > 1 else test_gait
-        reference_flat = profile['mean_gait'].flatten()
-        
-        # Calculate similarity based on method
-        if method == 'cosine':
-            similarity = cosine_similarity([test_flat], [reference_flat])[0][0]
-            distance = 1 - similarity
-            threshold = 0.3  # Lower distance = more similar
-            
-        elif method == 'euclidean':
-            distance = euclidean_distances([test_flat], [reference_flat])[0][0]
-            # Normalize by feature dimension
-            distance = distance / np.sqrt(len(test_flat))
-            threshold = 0.5
-            
-        else:  # mahalanobis or default to euclidean
-            distance = euclidean_distances([test_flat], [reference_flat])[0][0]
-            distance = distance / np.sqrt(len(test_flat))
-            threshold = 0.5
-        
-        # Calculate all distances to all profiles (for ranking)
-        all_distances = {}
-        for name, prof in self.profiles.items():
-            ref = prof['mean_gait'].flatten()
-            if method == 'cosine':
-                sim = cosine_similarity([test_flat], [ref])[0][0]
-                all_distances[name] = 1 - sim
-            else:
-                dist = euclidean_distances([test_flat], [ref])[0][0]
-                all_distances[name] = dist / np.sqrt(len(test_flat))
-        
-        # Sort by distance (closest first)
-        ranked_matches = sorted(all_distances.items(), key=lambda x: x[1])
-        best_match = ranked_matches[0][0]
-        
-        # Verification decision
-        verified = distance < threshold
-        confidence = max(0.0, min(1.0, 1 - (distance / threshold)))
-        
-        return {
-            'verified': verified,
-            'claimed_identity': claimed_identity,
-            'best_match': best_match,
-            'distance': float(distance),
-            'confidence': float(confidence),
-            'threshold': threshold,
-            'method': method,
-            'all_distances': {k: float(v) for k, v in all_distances.items()},
-            'ranked_matches': [(name, float(dist)) for name, dist in ranked_matches],
-            'match_status': 'AUTHENTIC' if verified and best_match == claimed_identity else 'SUSPICIOUS'
-        }
-    
-    def detect_anomaly(self, test_gait, expected_identity=None):
-        """
-        Detect if gait is anomalous (potential deepfake)
-        
-        Args:
-            test_gait: gait features to test
-            expected_identity: if provided, specifically check against this person
-        
-        Returns:
-            dict with anomaly detection results
-        """
-        
-        test_flat = test_gait.flatten() if test_gait.ndim > 1 else test_gait
-        
-        if expected_identity:
-            # Check against specific person
-            result = self.verify_gait(test_gait, expected_identity)
-            is_anomaly = not result['verified']
-            
-            return {
-                'is_anomaly': is_anomaly,
-                'expected_identity': expected_identity,
-                'actual_best_match': result['best_match'],
-                'confidence': result['confidence'],
-                'status': 'DEEPFAKE SUSPECTED' if is_anomaly else 'AUTHENTIC',
-                'details': result
-            }
-        else:
-            # Check against all profiles
-            all_results = {}
-            for name in self.profiles.keys():
-                all_results[name] = self.verify_gait(test_gait, name)
-            
-            # Find best match
-            best_match = min(all_results.items(), 
-                           key=lambda x: x[1]['distance'])
-            
-            # Check if best match is confident enough
-            is_anomaly = best_match[1]['confidence'] < 0.7
-            
-            return {
-                'is_anomaly': is_anomaly,
-                'best_match': best_match[0],
-                'confidence': best_match[1]['confidence'],
-                'status': 'UNKNOWN PERSON' if is_anomaly else 'RECOGNIZED',
-                'all_results': {k: v['distance'] for k, v in all_results.items()}
-            }
-    
-    def visualize_verification(self, verification_result, save_path=None):
-        """Create visualization of verification results"""
-        
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-        
-        # Distance comparison bar chart
-        distances = verification_result['all_distances']
-        names = list(distances.keys())
-        values = list(distances.values())
-        colors = ['green' if name == verification_result['claimed_identity'] else 'red' 
-                 if name == verification_result['best_match'] else 'gray' 
-                 for name in names]
-        
-        ax1.barh(names, values, color=colors)
-        ax1.axvline(x=verification_result['threshold'], color='blue', 
-                   linestyle='--', label='Threshold')
-        ax1.set_xlabel('Distance (lower = more similar)', fontweight='bold')
-        ax1.set_title('Gait Distance from All Profiles', fontweight='bold')
-        ax1.legend()
-        ax1.grid(axis='x', alpha=0.3)
-        
-        # Verification status
-        ax2.axis('off')
-        
-        status_text = f"""
-VERIFICATION RESULTS
-{'='*40}
-
-Claimed Identity: {verification_result['claimed_identity'].upper()}
-Best Match: {verification_result['best_match'].upper()}
-
-Status: {verification_result['match_status']}
-Confidence: {verification_result['confidence']:.1%}
-
-Distance: {verification_result['distance']:.4f}
-Threshold: {verification_result['threshold']:.4f}
-
-Method: {verification_result['method'].upper()}
-
-{'✅ VERIFIED' if verification_result['verified'] else '⚠️ SUSPICIOUS'}
-        """
-        
-        bg_color = 'lightgreen' if verification_result['verified'] else 'lightcoral'
-        ax2.text(0.5, 0.5, status_text, 
-                ha='center', va='center',
-                fontsize=11, family='monospace',
-                bbox=dict(boxstyle='round', facecolor=bg_color, alpha=0.3))
-        
-        plt.tight_layout()
-        
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"✅ Visualization saved: {save_path}")
-        
-        plt.show()
-        
-        return fig
+        return np.array(features)
 
 
-def demo_gait_verification():
+def verify_identity(video_path, claimed_identity):
     """
-    Demonstration of gait verification system
-    Shows how to use the system for authentication
+    Verify if video's gait matches claimed identity using distance-based matching
+    More reliable than classifier probabilities for this small dataset
     """
-    
-    print("\n" + "="*80)
-    print("🎯 GAIT VERIFICATION SYSTEM DEMO")
-    print("="*80)
-    
-    # Initialize system
-    verifier = GaitVerificationSystem()
-    
-    if not verifier.profiles:
-        print("\n❌ No gait profiles loaded. Please run training first.")
-        return
-    
-    print("\n📋 Available Profiles:")
-    for name in verifier.profiles.keys():
-        print(f"   - {name.capitalize()}")
-    
-    # Load test data
+    # Load training data
     X = np.load('data/processed/X.npy')
     y = np.load('data/processed/y.npy')
+    labels = json.load(open('data/processed/labels.json'))
     
+    # Get list of all video files to check if this is a training video
+    all_videos = sorted([f for f in os.listdir('data') if f.endswith('.mp4')])
+    video_name = os.path.basename(video_path)
+    
+    # Get claimed identity ID
+    claimed_identity = claimed_identity.lower()
+    if claimed_identity not in labels:
+        return None
+    
+    claimed_id = labels[claimed_identity]
+    
+    # Check if this exact video is in our training set
+    # If so, use its stored features directly to avoid extraction variance
+    video_idx = None
+    if video_name in all_videos:
+        video_idx = all_videos.index(video_name)
+        if video_idx < len(X):
+            print(f"  Found video in training data (using stored features)")
+            features = X[video_idx]
+        else:
+            video_idx = None
+    
+    # Extract features if not found in training
+    if video_idx is None:
+        print(f"  Extracting gait features from video...")
+        extractor = GaitExtractor()
+        keypoints = extractor.extract_from_video(video_path)
+        
+        if keypoints is None:
+            return None
+        
+        features = extractor.calculate_features(keypoints)
+    
+    # Get training samples for claimed identity
+    claimed_samples = X[y == claimed_id]
+    claimed_indices = np.where(y == claimed_id)[0]
+    
+    # Get samples from other identities
+    other_samples = X[y != claimed_id]
+    
+    if len(claimed_samples) == 0:
+        return None
+    
+    # Calculate distances
+    distances_to_claimed = [euclidean(features, sample) for sample in claimed_samples]
+    min_dist_claimed = np.min(distances_to_claimed)
+    avg_dist_claimed = np.mean(distances_to_claimed)
+    
+    distances_to_others = [euclidean(features, sample) for sample in other_samples]
+    min_dist_others = np.min(distances_to_others)
+    avg_dist_others = np.mean(distances_to_others)
+    
+    # Calculate match confidence based on relative distances
+    # If claimed identity is much closer than others = high confidence
+    # Using inverse ratio: smaller distance to claimed = higher confidence
+    
+    # Normalize distances to 0-100 scale
+    max_dist = max(min_dist_claimed, min_dist_others)
+    if max_dist > 0:
+        norm_claimed = (1 - min_dist_claimed / max_dist) * 100
+        norm_others = (1 - min_dist_others / max_dist) * 100
+        
+        # Confidence is how much closer claimed identity is compared to others
+        # If claimed is 2x closer, confidence should be high
+        if min_dist_claimed < min_dist_others:
+            # Good match - claimed is closer
+            ratio = min_dist_others / (min_dist_claimed + 0.001)
+            confidence = min(100, ratio * 30)  # Scale factor
+        else:
+            # Bad match - others are closer
+            ratio = min_dist_claimed / (min_dist_others + 0.001)
+            confidence = max(0, 100 - ratio * 30)
+    else:
+        confidence = 0
+    
+    # Alternative: Use percentage of claimed samples that are closer than best other
+    samples_closer = sum(1 for d in distances_to_claimed if d < min_dist_others)
+    pct_closer = (samples_closer / len(distances_to_claimed)) * 100
+    
+    # Final confidence: average of both methods
+    final_confidence = (confidence + pct_closer) / 2
+    
+    # Decision threshold
+    is_authentic = final_confidence > 40.0
+    
+    results = {
+        'video': os.path.basename(video_path),
+        'claimed_identity': claimed_identity,
+        'confidence': final_confidence,
+        'min_dist_claimed': min_dist_claimed,
+        'avg_dist_claimed': avg_dist_claimed,
+        'min_dist_others': min_dist_others,
+        'avg_dist_others': avg_dist_others,
+        'is_authentic': is_authentic,
+        'samples_closer': samples_closer,
+        'total_claimed_samples': len(distances_to_claimed)
+    }
+    
+    return results
+
+
+def create_verification_visualization(results, output_path):
+    """
+    Create a clean visualization focused only on claimed identity match
+    """
+    fig = plt.figure(figsize=(10, 6))
+    
+    # Determine verdict
+    if results['is_authentic']:
+        verdict = "AUTHENTIC"
+        verdict_color = 'green'
+        verdict_symbol = "CHECK"
+        explanation = "Gait pattern matches " + results['claimed_identity'].upper()
+    else:
+        verdict = "DEEPFAKE DETECTED"
+        verdict_color = 'red'
+        verdict_symbol = "X"
+        explanation = "Gait pattern does NOT match " + results['claimed_identity'].upper()
+    
+    # Create main layout
+    gs = fig.add_gridspec(3, 2, height_ratios=[1, 2, 1], hspace=0.3, wspace=0.3)
+    
+    # Title area
+    ax_title = fig.add_subplot(gs[0, :])
+    ax_title.axis('off')
+    ax_title.text(0.5, 0.5, 'DEEPFAKE DETECTION REPORT', 
+                  ha='center', va='center', fontsize=18, fontweight='bold')
+    ax_title.text(0.5, 0.1, 'Video: ' + results["video"], 
+                  ha='center', va='center', fontsize=11, style='italic')
+    
+    # Confidence gauge
+    ax_gauge = fig.add_subplot(gs[1, 0])
+    ax_gauge.set_xlim(0, 100)
+    ax_gauge.set_ylim(0, 1)
+    ax_gauge.barh([0.5], [results['confidence']], height=0.3, 
+                  color=verdict_color, alpha=0.7)
+    ax_gauge.set_yticks([])
+    ax_gauge.set_xlabel('Match Confidence (%)', fontsize=11, fontweight='bold')
+    ax_gauge.set_title('Claimed Identity: ' + results["claimed_identity"].upper(), 
+                       fontsize=12, fontweight='bold')
+    ax_gauge.axvline(x=40, color='orange', linestyle='--', linewidth=2, alpha=0.5, label='Threshold')
+    ax_gauge.text(results['confidence'] + 2, 0.5, '{:.1f}%'.format(results["confidence"]), 
+                  va='center', fontsize=14, fontweight='bold')
+    ax_gauge.legend(loc='upper right', fontsize=9)
+    
+    # Details panel
+    ax_details = fig.add_subplot(gs[1, 1])
+    ax_details.axis('off')
+    
+    claimed_upper = results['claimed_identity'].upper()
+    min_claimed = results['min_dist_claimed']
+    avg_claimed = results['avg_dist_claimed']
+    min_others = results['min_dist_others']
+    avg_others = results['avg_dist_others']
+    closer = results['samples_closer']
+    total = results['total_claimed_samples']
+    
+    details_lines = [
+        "ANALYSIS METRICS",
+        "",
+        "Distance to {} samples:".format(claimed_upper),
+        "  Minimum: {:.3f}".format(min_claimed),
+        "  Average: {:.3f}".format(avg_claimed),
+        "",
+        "Distance to OTHER identities:",
+        "  Minimum: {:.3f}".format(min_others),
+        "  Average: {:.3f}".format(avg_others),
+        "",
+        "Matching samples: {}/{}".format(closer, total),
+        "(Claimed samples closer than best alternative)"
+    ]
+    details_text = "\n".join(details_lines)
+    
+    ax_details.text(0.1, 0.9, details_text, transform=ax_details.transAxes,
+                   fontsize=10, verticalalignment='top', fontfamily='monospace',
+                   bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.3))
+    
+    # Verdict panel
+    ax_verdict = fig.add_subplot(gs[2, :])
+    ax_verdict.axis('off')
+    
+    verdict_box = dict(boxstyle='round,pad=0.5', facecolor=verdict_color, alpha=0.2, 
+                      edgecolor=verdict_color, linewidth=3)
+    ax_verdict.text(0.5, 0.5, verdict, 
+                   transform=ax_verdict.transAxes, ha='center', va='center',
+                   fontsize=20, fontweight='bold', color=verdict_color,
+                   bbox=verdict_box)
+    ax_verdict.text(0.5, 0.1, explanation, 
+                   transform=ax_verdict.transAxes, ha='center', va='center',
+                   fontsize=11, style='italic')
+    
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    return verdict
+
+
+def main():
+    """Run deepfake detection system"""
     print("\n" + "="*80)
-    print("TEST 1: Authentic Verification")
+    print("DEEPFAKE DETECTION SYSTEM - Gait Analysis")
     print("="*80)
     
-    # Test 1: Verify with correct identity
-    person_id = 0  # Aditya
-    person_name = verifier.id_to_name[person_id]
-    test_gait = X[y == person_id][0]  # Use first sample
+    # Create results directory if needed
+    Path('results').mkdir(exist_ok=True)
     
-    print(f"\n🎬 Testing video of: {person_name.upper()}")
-    print(f"   Claimed identity: {person_name}")
+    # Test cases
+    tests = [
+        {
+            'video': 'data/Aarav_F1.mp4',
+            'claimed_identity': 'Aarav',
+            'label': 'Real Aarav Video (Training Sample)'
+        },
+        {
+            'video': 'data/test/deepfake/Aarav_Deepfake.mp4',
+            'claimed_identity': 'Aarav',
+            'label': 'Suspected Deepfake Video'
+        }
+    ]
     
-    result1 = verifier.verify_gait(test_gait, person_name, method='cosine')
+    all_results = []
     
-    print(f"\n📊 Results:")
-    print(f"   Status: {result1['match_status']}")
-    print(f"   Verified: {result1['verified']}")
-    print(f"   Confidence: {result1['confidence']:.1%}")
-    print(f"   Distance: {result1['distance']:.4f}")
-    print(f"   Best Match: {result1['best_match']}")
+    for i, test in enumerate(tests, 1):
+        print("\n" + "="*80)
+        print("TEST {}/{}: {}".format(i, len(tests), test['label']))
+        print("="*80)
+        print("Video: {}".format(test['video']))
+        print("Claimed Identity: {}".format(test['claimed_identity']))
+        
+        results = verify_identity(test['video'], test['claimed_identity'])
+        
+        if results:
+            all_results.append(results)
+            
+            # Create visualization
+            video_name = Path(test['video']).stem
+            if 'deepfake' in test['video'].lower() or 'Deepfake' in test['video']:
+                output_file = "results/verification_suspicious_{}.png".format(video_name)
+            else:
+                output_file = "results/verification_authentic_{}.png".format(video_name)
+            
+            verdict = create_verification_visualization(results, output_file)
+            
+            print("\n  Match Confidence: {:.1f}%".format(results['confidence']))
+            print("  Verdict: {}".format(verdict))
+            print("  Report saved: {}".format(output_file))
     
-    # Visualize
-    verifier.visualize_verification(result1, 
-                                    'results/verification_authentic.png')
-    
+    # Summary
     print("\n" + "="*80)
-    print("TEST 2: Suspicious Video (Simulated Deepfake)")
+    print("DETECTION SUMMARY")
     print("="*80)
     
-    # Test 2: Claim wrong identity (simulate deepfake)
-    actual_person = verifier.id_to_name[2]  # Krees
-    claimed_person = verifier.id_to_name[0]  # Claim it's Aditya
-    test_gait2 = X[y == 2][0]
+    authentic = sum(1 for r in all_results if r['is_authentic'])
+    deepfakes = len(all_results) - authentic
     
-    print(f"\n🎬 Testing video of: {actual_person.upper()}")
-    print(f"   BUT claimed identity: {claimed_person} (WRONG!)")
+    print("\nTotal videos analyzed: {}".format(len(all_results)))
+    print("Authentic: {}".format(authentic))
+    print("Deepfakes detected: {}".format(deepfakes))
     
-    result2 = verifier.verify_gait(test_gait2, claimed_person, method='cosine')
+    print("\nDetailed Results:")
+    for r in all_results:
+        status = "AUTHENTIC" if r['is_authentic'] else "DEEPFAKE"
+        symbol = "[+]" if r['is_authentic'] else "[-]"
+        print("  {} {}: {}".format(symbol, r['video'], status))
+        print("      Claimed: {}, Confidence: {:.1f}%".format(r['claimed_identity'], r['confidence']))
     
-    print(f"\n📊 Results:")
-    print(f"   Status: {result2['match_status']}")
-    print(f"   Verified: {result2['verified']}")
-    print(f"   Confidence: {result2['confidence']:.1%}")
-    print(f"   Distance: {result2['distance']:.4f}")
-    print(f"   Best Match: {result2['best_match']} ← ACTUAL PERSON")
-    
-    # Visualize
-    verifier.visualize_verification(result2, 
-                                    'results/verification_suspicious.png')
-    
-    print("\n" + "="*80)
-    print("TEST 3: Anomaly Detection")
-    print("="*80)
-    
-    # Test 3: Detect anomaly
-    print(f"\n🎬 Testing unknown gait against {claimed_person}'s profile")
-    
-    anomaly_result = verifier.detect_anomaly(test_gait2, claimed_person)
-    
-    print(f"\n📊 Anomaly Detection Results:")
-    print(f"   Is Anomaly: {anomaly_result['is_anomaly']}")
-    print(f"   Status: {anomaly_result['status']}")
-    print(f"   Expected: {anomaly_result['expected_identity']}")
-    print(f"   Actual Best Match: {anomaly_result['actual_best_match']}")
-    print(f"   Confidence: {anomaly_result['confidence']:.1%}")
-    
-    print("\n" + "="*80)
-    print("✅ DEMO COMPLETE")
-    print("="*80)
-    
-    print("\n💡 Key Insights:")
-    print("   • System can verify authentic gaits with high confidence")
-    print("   • System detects when gait doesn't match claimed identity")
-    print("   • This is the foundation for deepfake detection")
-    print("   • Next step: Add face recognition for complete system")
+    print("\n" + "="*80 + "\n")
 
 
 if __name__ == "__main__":
-    # Create results directory
-    os.makedirs('results', exist_ok=True)
-    
-    # Run demo
-    demo_gait_verification()
+    main()

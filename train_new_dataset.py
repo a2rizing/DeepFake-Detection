@@ -1,6 +1,6 @@
 """
-Simple Retraining Script - No TensorFlow dependency
-Extracts gait features and trains models on new videos
+Retrain Models with New Dataset
+Handles Front (F1, F2...) and Side (S1, S2...) views
 """
 
 import os
@@ -13,19 +13,15 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import joblib
-
-# MediaPipe for pose detection
 import mediapipe as mp
 
-class SimpleGaitExtractor:
+class GaitExtractor:
     """Extract gait features using MediaPipe"""
     
     def __init__(self):
-        self.mp_pose = mp.solutions.pose
-        self.pose = self.mp_pose.Pose(
+        self.mp_pose = mp.solutions.pose.Pose(
             static_image_mode=False,
             model_complexity=1,
             min_detection_confidence=0.5,
@@ -51,7 +47,7 @@ class SimpleGaitExtractor:
             
             frame_count += 1
             
-            # Skip some frames for efficiency
+            # Skip frames for efficiency
             if frame_count % 2 != 0:
                 continue
             
@@ -59,7 +55,7 @@ class SimpleGaitExtractor:
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
             # Process with MediaPipe
-            results = self.pose.process(rgb_frame)
+            results = self.mp_pose.process(rgb_frame)
             
             if results.pose_landmarks:
                 # Extract 33 landmarks (x, y, z, visibility)
@@ -76,7 +72,6 @@ class SimpleGaitExtractor:
         
         # Pad or truncate to max_frames
         if len(keypoints_list) < max_frames:
-            # Pad with last frame
             while len(keypoints_list) < max_frames:
                 keypoints_list.append(keypoints_list[-1])
         else:
@@ -104,11 +99,11 @@ class SimpleGaitExtractor:
         return np.array(features)
 
 def scan_videos(data_dir='data'):
-    """Scan for all MP4 videos and group by person"""
+    """Scan for all MP4 videos with F/S naming convention"""
     
-    print("\n" + "=" * 80)
+    print("\n" + "="*80)
     print("🔍 SCANNING FOR VIDEOS")
-    print("=" * 80)
+    print("="*80)
     
     video_files = [f for f in os.listdir(data_dir) 
                    if f.endswith('.mp4') and os.path.isfile(os.path.join(data_dir, f))]
@@ -117,37 +112,55 @@ def scan_videos(data_dir='data'):
         print("❌ No videos found!")
         return {}
     
-    # Group by person (remove numbers from names)
-    person_videos = defaultdict(list)
+    # Group by person (extract name before _F or _S)
+    person_videos = defaultdict(lambda: {'front': [], 'side': []})
     
     for video_file in video_files:
-        name_part = os.path.splitext(video_file)[0]
-        # Remove trailing numbers: "Anshul1" -> "Anshul"
-        person_name = re.sub(r'[-_]?\d+$', '', name_part).strip().lower()
-        person_videos[person_name].append(video_file)
+        # Pattern: Name_F1.mp4 or Name_S1.mp4
+        match = re.match(r'(.+?)_([FS])(\d+)\.mp4', video_file)
+        
+        if match:
+            person_name = match.group(1).lower()
+            view_type = match.group(2)  # F or S
+            
+            if view_type == 'F':
+                person_videos[person_name]['front'].append(video_file)
+            elif view_type == 'S':
+                person_videos[person_name]['side'].append(video_file)
     
     print(f"\n✅ Found {len(video_files)} video(s) for {len(person_videos)} person(s):\n")
     
-    for person, videos in sorted(person_videos.items()):
-        print(f"   📹 {person.capitalize()}: {len(videos)} video(s)")
-        for vid in sorted(videos):
-            print(f"      └─ {vid}")
+    total_front = 0
+    total_side = 0
     
-    print("\n" + "=" * 80)
+    for person, videos in sorted(person_videos.items()):
+        n_front = len(videos['front'])
+        n_side = len(videos['side'])
+        total_front += n_front
+        total_side += n_side
+        
+        print(f"   📹 {person.capitalize()}: {n_front} front + {n_side} side = {n_front + n_side} total")
+        print(f"      Front: {', '.join(sorted(videos['front']))}")
+        print(f"      Side:  {', '.join(sorted(videos['side']))}")
+        print()
+    
+    print(f"   📊 Total: {total_front} front views, {total_side} side views, {total_front + total_side} videos")
+    print("\n" + "="*80)
     
     return person_videos
 
 def extract_features(person_videos, data_dir='data'):
     """Extract features from all videos"""
     
-    print("\n" + "=" * 80)
+    print("\n" + "="*80)
     print("🎬 EXTRACTING FEATURES")
-    print("=" * 80)
+    print("="*80)
     
-    extractor = SimpleGaitExtractor()
+    extractor = GaitExtractor()
     
     all_features = []
     all_labels = []
+    all_view_types = []  # Track if front or side
     label_mapping = {}
     
     # Create label mapping
@@ -159,7 +172,7 @@ def extract_features(person_videos, data_dir='data'):
         print(f"   {idx}: {name.capitalize()}")
     
     # Process each video
-    total_videos = sum(len(vids) for vids in person_videos.values())
+    total_videos = sum(len(v['front']) + len(v['side']) for v in person_videos.values())
     current = 0
     
     for person, videos in sorted(person_videos.items()):
@@ -169,35 +182,66 @@ def extract_features(person_videos, data_dir='data'):
         print(f"👤 {person.capitalize()} (ID: {person_id})")
         print(f"{'─'*80}")
         
-        for video_file in sorted(videos):
-            current += 1
-            video_path = os.path.join(data_dir, video_file)
-            
-            print(f"\n[{current}/{total_videos}] Processing: {video_file}")
-            
-            try:
-                # Extract keypoints
-                keypoints = extractor.extract_from_video(video_path)
+        # Process front views
+        if videos['front']:
+            print(f"\n  🎥 Front Views ({len(videos['front'])})")
+            for video_file in sorted(videos['front']):
+                current += 1
+                video_path = os.path.join(data_dir, video_file)
                 
-                if keypoints is not None:
-                    # Calculate features
-                    features = extractor.calculate_features(keypoints)
+                print(f"  [{current}/{total_videos}] Processing: {video_file}")
+                
+                try:
+                    keypoints = extractor.extract_from_video(video_path)
                     
-                    if features is not None:
-                        all_features.append(features)
-                        all_labels.append(person_id)
-                        print(f"   ✅ Extracted {len(features)} features")
+                    if keypoints is not None:
+                        features = extractor.calculate_features(keypoints)
+                        
+                        if features is not None:
+                            all_features.append(features)
+                            all_labels.append(person_id)
+                            all_view_types.append('front')
+                            print(f"     ✅ Extracted {len(features)} features")
+                        else:
+                            print(f"     ⚠️  Failed to calculate features")
                     else:
-                        print(f"   ⚠️  Failed to calculate features")
-                else:
-                    print(f"   ⚠️  Failed to extract keypoints")
-            
-            except Exception as e:
-                print(f"   ❌ Error: {e}")
+                        print(f"     ⚠️  Failed to extract keypoints")
+                
+                except Exception as e:
+                    print(f"     ❌ Error: {e}")
+        
+        # Process side views
+        if videos['side']:
+            print(f"\n  🎥 Side Views ({len(videos['side'])})")
+            for video_file in sorted(videos['side']):
+                current += 1
+                video_path = os.path.join(data_dir, video_file)
+                
+                print(f"  [{current}/{total_videos}] Processing: {video_file}")
+                
+                try:
+                    keypoints = extractor.extract_from_video(video_path)
+                    
+                    if keypoints is not None:
+                        features = extractor.calculate_features(keypoints)
+                        
+                        if features is not None:
+                            all_features.append(features)
+                            all_labels.append(person_id)
+                            all_view_types.append('side')
+                            print(f"     ✅ Extracted {len(features)} features")
+                        else:
+                            print(f"     ⚠️  Failed to calculate features")
+                    else:
+                        print(f"     ⚠️  Failed to extract keypoints")
+                
+                except Exception as e:
+                    print(f"     ❌ Error: {e}")
     
     # Convert to arrays
     X = np.array(all_features)
     y = np.array(all_labels)
+    view_types = np.array(all_view_types)
     
     print(f"\n{'='*80}")
     print("✅ EXTRACTION COMPLETE")
@@ -206,35 +250,40 @@ def extract_features(person_videos, data_dir='data'):
     print(f"   Total samples: {len(X)}")
     print(f"   Features/sample: {X.shape[1]}")
     print(f"   People: {len(label_mapping)}")
+    print(f"   Front views: {np.sum(view_types == 'front')}")
+    print(f"   Side views: {np.sum(view_types == 'side')}")
     
     print(f"\n📈 Samples per person:")
     for name, idx in sorted(label_mapping.items(), key=lambda x: x[1]):
         count = np.sum(y == idx)
-        print(f"   {name.capitalize()}: {count}")
+        front_count = np.sum((y == idx) & (view_types == 'front'))
+        side_count = np.sum((y == idx) & (view_types == 'side'))
+        print(f"   {name.capitalize()}: {count} total ({front_count} front + {side_count} side)")
     
-    return X, y, label_mapping
+    return X, y, label_mapping, view_types
 
 def train_models(X, y):
     """Train classification models"""
     
-    print("\n" + "=" * 80)
+    print("\n" + "="*80)
     print("🤖 TRAINING MODELS")
-    print("=" * 80)
+    print("="*80)
     
     # Check if we have enough data for split
-    # Need at least 2 samples per class for stratified split
     unique, counts = np.unique(y, return_counts=True)
     min_samples = np.min(counts)
     
-    if len(X) >= 10 and min_samples >= 2:
+    if len(X) >= 20 and min_samples >= 2:
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42, stratify=y
         )
         print(f"\n📊 Split: Train={len(X_train)}, Test={len(X_test)}")
+        has_test_set = True
     else:
-        print(f"\n⚠️  Limited data ({len(X)} samples, min per class: {min_samples}). Using all for training.")
+        print(f"\n⚠️  Using all data for training (min per class: {min_samples})")
         X_train = X_test = X
         y_train = y_test = y
+        has_test_set = False
     
     # Normalize
     scaler = StandardScaler()
@@ -245,8 +294,7 @@ def train_models(X, y):
     models = {
         'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
         'Gradient Boosting': GradientBoostingClassifier(n_estimators=100, random_state=42),
-        'SVM': SVC(kernel='rbf', probability=True, random_state=42),
-        'Logistic Regression': LogisticRegression(random_state=42, max_iter=1000)
+        'SVM': SVC(kernel='rbf', probability=True, random_state=42)
     }
     
     best_model = None
@@ -265,6 +313,10 @@ def train_models(X, y):
         
         print(f"Accuracy: {accuracy:.2%}")
         
+        if has_test_set and accuracy < 1.0:
+            print(f"\nClassification Report:")
+            print(classification_report(y_test, y_pred))
+        
         if accuracy > best_accuracy:
             best_accuracy = accuracy
             best_model = model
@@ -277,12 +329,12 @@ def train_models(X, y):
     
     return best_model, scaler, best_accuracy, best_name
 
-def save_results(X, y, label_mapping, model, scaler, accuracy, model_name):
+def save_results(X, y, label_mapping, model, scaler, accuracy, model_name, view_types):
     """Save all results"""
     
-    print("\n" + "=" * 80)
+    print("\n" + "="*80)
     print("💾 SAVING RESULTS")
-    print("=" * 80)
+    print("="*80)
     
     # Create directories
     os.makedirs('data/processed', exist_ok=True)
@@ -291,6 +343,7 @@ def save_results(X, y, label_mapping, model, scaler, accuracy, model_name):
     # Save processed data
     np.save('data/processed/X.npy', X)
     np.save('data/processed/y.npy', y)
+    np.save('data/processed/view_types.npy', view_types)
     
     with open('data/processed/labels.json', 'w') as f:
         json.dump(label_mapping, f, indent=2)
@@ -298,6 +351,7 @@ def save_results(X, y, label_mapping, model, scaler, accuracy, model_name):
     print("\n✅ Saved processed data:")
     print("   • data/processed/X.npy")
     print("   • data/processed/y.npy")
+    print("   • data/processed/view_types.npy (front/side)")
     print("   • data/processed/labels.json")
     
     # Save model and scaler
@@ -314,8 +368,11 @@ def save_results(X, y, label_mapping, model, scaler, accuracy, model_name):
         'accuracy': float(accuracy),
         'num_people': len(label_mapping),
         'num_samples': len(X),
+        'num_front_views': int(np.sum(view_types == 'front')),
+        'num_side_views': int(np.sum(view_types == 'side')),
         'feature_dim': X.shape[1],
-        'people': list(label_mapping.keys())
+        'people': list(label_mapping.keys()),
+        'samples_per_person': {name: int(np.sum(y == idx)) for name, idx in label_mapping.items()}
     }
     
     with open('models/saved/metadata.json', 'w') as f:
@@ -323,15 +380,16 @@ def save_results(X, y, label_mapping, model, scaler, accuracy, model_name):
     
     print("   • models/saved/metadata.json")
     
-    print("\n" + "=" * 80)
+    print("\n" + "="*80)
 
 def main():
     """Main pipeline"""
     
     print("\n")
-    print("█" * 80)
-    print("█" + " " * 20 + "SIMPLE GAIT RECOGNITION RETRAINING" + " " * 25 + "█")
-    print("█" * 80)
+    print("█"*80)
+    print("█" + " "*15 + "GAIT RECOGNITION - NEW DATASET TRAINING" + " "*24 + "█")
+    print("█" + " "*20 + "Front (F) and Side (S) Views" + " "*31 + "█")
+    print("█"*80)
     
     # Scan videos
     person_videos = scan_videos('data')
@@ -341,7 +399,7 @@ def main():
         return
     
     # Extract features
-    X, y, label_mapping = extract_features(person_videos, 'data')
+    X, y, label_mapping, view_types = extract_features(person_videos, 'data')
     
     if len(X) == 0:
         print("\n❌ No features extracted. Check videos.")
@@ -351,29 +409,33 @@ def main():
     model, scaler, accuracy, model_name = train_models(X, y)
     
     # Save everything
-    save_results(X, y, label_mapping, model, scaler, accuracy, model_name)
+    save_results(X, y, label_mapping, model, scaler, accuracy, model_name, view_types)
     
-    print("\n" + "=" * 80)
+    print("\n" + "="*80)
     print("✅ ✅ ✅  PIPELINE COMPLETE  ✅ ✅ ✅")
-    print("=" * 80)
+    print("="*80)
     
     print("\n📋 SUMMARY:")
     print(f"   • People: {len(label_mapping)}")
-    print(f"   • Videos: {len(X)}")
+    print(f"   • Total Videos: {len(X)}")
+    print(f"   • Front Views: {np.sum(view_types == 'front')}")
+    print(f"   • Side Views: {np.sum(view_types == 'side')}")
     print(f"   • Best Model: {model_name}")
     print(f"   • Accuracy: {accuracy:.2%}")
     
-    print("\n🚀 NEXT STEPS:")
-    print("   1. Generate confusion matrix:")
-    print("      python quick_confusion_matrix.py")
-    print()
-    print("   2. Test verification system:")
-    print("      python gait_verification_system.py")
-    print()
-    print("   3. View all outputs:")
-    print("      python show_outputs.py")
+    print("\n📁 DEEPFAKE TESTING:")
+    print("   Put your deepfake videos in:")
+    print("   • data/test/deepfake/  ← Deepfake videos go here")
+    print("   • data/test/real/      ← Real test videos go here")
     
-    print("\n" + "=" * 80 + "\n")
+    print("\n🚀 NEXT STEPS:")
+    print("   1. Add deepfake videos to data/test/deepfake/")
+    print("   2. Generate confusion matrix:")
+    print("      python quick_confusion_matrix.py")
+    print("   3. Test verification system:")
+    print("      python gait_verification_system.py")
+    
+    print("\n" + "="*80 + "\n")
 
 if __name__ == "__main__":
     main()

@@ -1,118 +1,124 @@
 import numpy as np
-import json
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import os
 
-# Paths
-X_path = "data/processed/X.npy"
-y_path = "data/processed/y.npy"
-labels_path = "data/processed/labels.json"
+# Load gait keypoints CSV
+csv_path = "data/gait_keypoints.csv"
 
-# Load data
-X = np.load(X_path)  # Shape: (N_samples, N_frames, N_features)
-y = np.load(y_path)
+if not os.path.exists(csv_path):
+    print(f"Error: {csv_path} not found!")
+    print("Run regenerate_keypoints_csv.py first to generate keypoints.")
+    exit(1)
 
-with open(labels_path) as f:
-    labels_json = json.load(f)
+print("Loading gait keypoints from CSV...")
+df = pd.read_csv(csv_path)
 
-print(f"Data shape: {X.shape}")
-print(f"Labels: {labels_json}")
+# Get unique video names
+video_names = df['video_name'].unique()
 
-# Build reverse mapping: numeric ID → name
-label_map = {v: k for k, v in labels_json.items()}
+print(f"\nFound {len(video_names)} videos:")
+for i, name in enumerate(video_names):
+    frame_count = len(df[df['video_name'] == name])
+    print(f"  {i}: {name} ({frame_count} frames)")
 
-# Let user choose which person to visualize
-print("\nAvailable people:")
-for person_id, person_name in label_map.items():
-    print(f"  {person_id}: {person_name}")
+# Let user choose which video to visualize
+video_idx = int(input(f"\nChoose video to visualize (0-{len(video_names)-1}): "))
+if video_idx < 0 or video_idx >= len(video_names):
+    video_idx = 0
+    print(f"Invalid choice, using video {video_idx}")
 
-sample_idx = int(input(f"\nChoose person to visualize (0-{len(label_map)-1}): "))
-if sample_idx < 0 or sample_idx >= len(X):
-    sample_idx = 0
-    print(f"Invalid choice, using person {sample_idx}")
+selected_video = video_names[video_idx]
+print(f"\nVisualizing: {selected_video}")
 
-sample_sequence = X[sample_idx]  # Shape: (N_frames, N_features)
-label_id = y[sample_idx]
-label_name = label_map.get(label_id, f"Person_{label_id}")
+# Extract frames for selected video
+video_df = df[df['video_name'] == selected_video].sort_values('frame')
+n_frames = len(video_df)
 
-print(f"Visualizing: {label_name}")
-print(f"Sequence shape: {sample_sequence.shape}")
+print(f"Total frames: {n_frames}")
 
-# Extract x,y coordinates from features
-# Feature format: [x_0, y_0, x_1, y_1, ..., x_32, y_32, angle_0, angle_1, angle_2, angle_3]
-# So we have 33 landmarks * 2 = 66 coordinate features, plus 4 angle features = 70 total
+# Extract x,y coordinates for all frames
 n_landmarks = 33
-n_frames = sample_sequence.shape[0]
+x_coords = np.zeros((n_frames, n_landmarks))
+y_coords = np.zeros((n_frames, n_landmarks))
 
-# Extract x,y coordinates (first 66 features)
-coords_data = sample_sequence[:, :66]  # (n_frames, 66)
-x_coords = coords_data[:, 0::2]  # (n_frames, 33) - every other starting from 0
-y_coords = coords_data[:, 1::2]  # (n_frames, 33) - every other starting from 1
+for frame_idx, row in enumerate(video_df.itertuples()):
+    for lm_idx in range(n_landmarks):
+        x_coords[frame_idx, lm_idx] = getattr(row, f'x_{lm_idx}')
+        y_coords[frame_idx, lm_idx] = getattr(row, f'y_{lm_idx}')
+
+print(f"Extracted coordinates: {x_coords.shape}")
 
 # MediaPipe pose connections for skeleton visualization
 pose_connections = [
-    # Face connections
+    # Face
     (0, 1), (1, 2), (2, 3), (3, 7),
     (0, 4), (4, 5), (5, 6), (6, 8),
-    # Body connections
-    (9, 10),  # mouth to mouth
-    (11, 12),  # shoulder to shoulder
+    # Torso
+    (9, 10),
+    (11, 12), (11, 23), (12, 24), (23, 24),
+    # Arms
     (11, 13), (13, 15),  # left arm
     (12, 14), (14, 16),  # right arm
-    (11, 23), (12, 24),  # shoulders to hips
-    (23, 24),  # hip to hip
+    # Legs
     (23, 25), (25, 27), (27, 29), (27, 31),  # left leg
     (24, 26), (26, 28), (28, 30), (28, 32),  # right leg
 ]
 
-# Plot setup
-fig, ax = plt.subplots(figsize=(10, 8))
-ax.set_title(f"Gait Visualization: {label_name}")
-ax.set_xlim(-2, 2)  # Adjusted for normalized coordinates
-ax.set_ylim(-2, 2)
+# Create figure and axis
+fig, ax = plt.subplots(figsize=(10, 10))
+ax.set_xlim(0, 1)
+ax.set_ylim(1, 0)  # Inverted for image coordinates
 ax.set_aspect('equal')
+ax.set_title(f"Gait Visualization: {selected_video}")
+ax.set_xlabel("X")
+ax.set_ylabel("Y")
 ax.grid(True, alpha=0.3)
 
-# Initialize scatter plot for joints
-scat = ax.scatter([], [], s=50, c='red', alpha=0.7)
+# Plot lines for skeleton
+lines = []
+for connection in pose_connections:
+    line, = ax.plot([], [], 'b-', lw=2, alpha=0.7)
+    lines.append(line)
 
-# Initialize lines for skeleton connections
-lines = [ax.plot([], [], 'b-', alpha=0.6, linewidth=2)[0] for _ in pose_connections]
+# Plot points for landmarks
+points, = ax.plot([], [], 'ro', markersize=6)
 
-# Text to show current frame
-frame_text = ax.text(0.02, 0.98, '', transform=ax.transAxes, fontsize=12,
-                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+def init():
+    """Initialize animation"""
+    for line in lines:
+        line.set_data([], [])
+    points.set_data([], [])
+    return lines + [points]
 
-def update(frame_idx):
-    # Get coordinates for current frame
-    x_frame = x_coords[frame_idx]  # (33,)
-    y_frame = y_coords[frame_idx]  # (33,)
-    
-    # Flip y-axis for proper visualization (MediaPipe uses top-left origin)
-    y_frame_flipped = -y_frame
-    
-    # Update scatter plot
-    scat.set_offsets(np.column_stack([x_frame, y_frame_flipped]))
+def animate(frame_num):
+    """Update animation for each frame"""
+    # Get coordinates for this frame
+    x = x_coords[frame_num]
+    y = y_coords[frame_num]
     
     # Update skeleton lines
-    for line_idx, (i, j) in enumerate(pose_connections):
-        if i < len(x_frame) and j < len(x_frame):  # Safety check
-            lines[line_idx].set_data([x_frame[i], x_frame[j]], 
-                                   [y_frame_flipped[i], y_frame_flipped[j]])
+    for i, (start, end) in enumerate(pose_connections):
+        lines[i].set_data([x[start], x[end]], [y[start], y[end]])
     
-    # Update frame counter
-    frame_text.set_text(f'Frame: {frame_idx + 1}/{n_frames}')
+    # Update landmark points
+    points.set_data(x, y)
     
-    return [scat] + lines + [frame_text]
+    ax.set_title(f"Gait: {selected_video} - Frame {frame_num+1}/{n_frames}")
+    
+    return lines + [points]
 
-print(f"Creating animation with {n_frames} frames...")
-anim = FuncAnimation(fig, update, frames=n_frames, interval=100, blit=True, repeat=True)
+# Create animation
+print("\nCreating animation...")
+print("Close the window when done.\n")
 
-# Show the plot
+anim = FuncAnimation(
+    fig, animate, init_func=init,
+    frames=n_frames, interval=50, blit=True, repeat=True
+)
+
 plt.tight_layout()
 plt.show()
 
-# Optionally save as GIF (uncomment if needed)
-# print("Saving animation as GIF...")
-# anim.save(f'gait_animation_{label_name}.gif', writer='pillow', fps=10)
+print("Animation closed.")
