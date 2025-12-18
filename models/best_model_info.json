@@ -1,8 +1,8 @@
 {
-  "model_name": "CNN",
-  "model_path": "models\\CNN_20251218_132643.keras",
-  "accuracy": 0.925000011920929,
-  "timestamp": "20251218_132643",
+  "model_name": "CNN_LSTM",
+  "model_path": "models\\CNN_LSTM_20251218_164543.keras",
+  "accuracy": 0.1428571492433548,
+  "timestamp": "20251218_164543",
   "num_classes": 13,
   "sequence_length": 64,
   "num_features": 70
