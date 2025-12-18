@@ -35,7 +35,7 @@ from src.models.models_extended import GaitModelBuilder
 class ModelTrainer:
     """Trains and evaluates multiple gait recognition models"""
     
-    def __init__(self, data_dir="data/processed", models_dir="models", results_dir="results"):
+    def __init__(self, data_dir="data/processed_augmented", models_dir="models", results_dir="results"):
         self.data_dir = data_dir
         self.models_dir = models_dir
         self.results_dir = results_dir
@@ -353,7 +353,7 @@ class ModelTrainer:
 
 def main():
     parser = argparse.ArgumentParser(description="Train gait recognition models")
-    parser.add_argument("--data_dir", type=str, default="data/processed",
+    parser.add_argument("--data_dir", type=str, default="data/processed_augmented",
                         help="Directory with preprocessed data")
     parser.add_argument("--models_dir", type=str, default="models",
                         help="Directory to save trained models")

@@ -273,10 +273,14 @@ class GaitDetector:
             predicted_identity = self.id_to_name.get(prediction, f"Person_{prediction}")
             
             # Determine if authentic
+            # LOW confidence = likely synthetic/deepfake (doesn't match any real person well)
+            is_low_confidence = confidence < threshold
+            
             if claimed_identity:
-                is_authentic = (predicted_identity.lower() == claimed_identity.lower())
+                is_authentic = (predicted_identity.lower() == claimed_identity.lower()) and not is_low_confidence
             else:
-                is_authentic = True  # No claim to verify
+                # No claim - but still flag if confidence is suspiciously low
+                is_authentic = not is_low_confidence
             
             result = {
                 "video_path": video_path,
@@ -285,17 +289,24 @@ class GaitDetector:
                 "confidence": confidence,
                 "threshold": threshold,
                 "is_authentic": is_authentic,
+                "is_low_confidence": is_low_confidence,
                 "frames_analyzed": len(keypoints),
                 "timestamp": datetime.now().isoformat()
             }
             
+            if is_low_confidence:
+                result["warning"] = "LOW CONFIDENCE - Possible synthetic/deepfake video"
+                print(f"   ⚠️ [SUSPICIOUS] Low confidence ({confidence:.2%}) - Possible DEEPFAKE")
+                print(f"      Gait doesn't strongly match any known person")
+            
             if claimed_identity:
                 result["claimed_identity"] = claimed_identity
                 if is_authentic:
-                    print(f"   [OK] AUTHENTIC - Matches claimed identity: {claimed_identity}")
-                else:
-                    print(f"   [ALERT] SUSPICIOUS - Predicted: {predicted_identity}, Claimed: {claimed_identity}")
-            else:
+                    print(f"   ✅ [AUTHENTIC] Matches claimed identity: {claimed_identity} (confidence: {confidence:.2%})")
+                elif not is_low_confidence:
+                    print(f"   ⚠️ [IDENTITY MISMATCH] Predicted: {predicted_identity}, Claimed: {claimed_identity}")
+                # Low confidence case already printed above
+            elif not is_low_confidence:
                 print(f"   Identified as: {predicted_identity} (confidence: {confidence:.2%})")
             
             return result

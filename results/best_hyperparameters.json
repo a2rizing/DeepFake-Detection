@@ -1,0 +1,11 @@
+{
+  "model_type": "transformer",
+  "learning_rate": 0.0024706844298612745,
+  "dropout": 0.4,
+  "l2_reg": 0.0002222819110888903,
+  "cnn_filters": 128,
+  "lstm_units": 128,
+  "d_model": 128,
+  "num_heads": 4,
+  "num_layers": 2
+}
