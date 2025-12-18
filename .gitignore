@@ -80,6 +80,9 @@ data/*.avi
 data/processed/X.npy
 data/processed/y.npy
 data/gait_keypoints.csv
+data/frames/
+data/frames_augmented/
+data/videos_augmented/
 
 # Model files (can be regenerated)
 *.pkl

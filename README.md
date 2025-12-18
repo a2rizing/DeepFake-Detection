@@ -1,592 +1,190 @@
-# 🎭 DeepFake Detection using Gait Analysis
+# Gait-Based Deepfake Detection
 
-![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
-![TensorFlow](https://img.shields.io/badge/TensorFlow-v2.0+-orange.svg)
-![OpenCV](https://img.shields.io/badge/OpenCV-v4.0+-green.svg)
-![MediaPipe](https://img.shields.io/badge/MediaPipe-v0.8+-red.svg)
+A deep learning system for detecting deepfakes using gait analysis from video pose keypoints.
 
-A comprehensive machine learning pipeline that detects deepfake videos by analyzing human gait patterns using MediaPipe pose estimation and advanced ML algorithms.
+## Quick Start
 
-## 📋 Table of Contents
-
-- [🎭 DeepFake Detection using Gait Analysis](#-deepfake-detection-using-gait-analysis)
-  - [📋 Table of Contents](#-table-of-contents)
-  - [🎯 Overview](#-overview)
-  - [🧬 Features](#-features)
-  - [🏗️ Project Structure](#️-project-structure)
-  - [⚙️ Installation](#️-installation)
-  - [🚀 Quick Start](#-quick-start)
-  - [📖 Detailed Usage Guide](#-detailed-usage-guide)
-    - [1. Data Preprocessing](#1-data-preprocessing)
-    - [2. Gait Visualization](#2-gait-visualization)
-    - [3. Model Training](#3-model-training)
-    - [4. Hyperparameter Tuning](#4-hyperparameter-tuning)
-    - [5. Deep Learning Models](#5-deep-learning-models)
-    - [6. Model Evaluation](#6-model-evaluation)
-    - [7. Deepfake Detection](#7-deepfake-detection)
-  - [🎥 Testing with Your Videos](#-testing-with-your-videos)
-  - [📊 Model Performance](#-model-performance)
-  - [🛠️ Troubleshooting](#️-troubleshooting)
-  - [🤝 Contributing](#-contributing)
-  - [📄 License](#-license)
-
-## 🎯 Overview
-
-This project implements a novel approach to deepfake detection by analyzing **human gait patterns** extracted from videos. Unlike traditional facial analysis methods, gait analysis is more robust against sophisticated deepfake generation techniques that primarily focus on facial features.
-
-### How It Works:
-
-1. **Pose Extraction**: Uses MediaPipe to extract 33 body landmarks from video frames
-2. **Gait Analysis**: Processes keypoints to extract meaningful gait features (coordinates + joint angles)
-3. **Machine Learning**: Trains multiple models (Traditional ML + Deep Learning) to classify authentic vs deepfake videos
-4. **Detection**: Analyzes new videos to determine authenticity with confidence scores
-
-## 🧬 Features
-
-- ✅ **Multiple Model Support**: RandomForest, SVM, Logistic Regression, KNN, Gradient Boosting, LSTM, CNN, Hybrid models
-- ✅ **Advanced Preprocessing**: Normalization, feature engineering, sequence resampling
-- ✅ **Hyperparameter Tuning**: Grid Search and Random Search optimization
-- ✅ **Comprehensive Evaluation**: Confusion matrices, ROC curves, precision-recall analysis
-- ✅ **Real-time Detection**: Process MP4 videos with confidence scoring
-- ✅ **Batch Processing**: Analyze multiple videos simultaneously
-- ✅ **Visualization Tools**: Gait pattern visualization and model performance charts
-- ✅ **Robust Pipeline**: Error handling, logging, and reproducible results
-
-## 🏗️ Project Structure
-
-```
-DeepFake-Detection/
-├── 📁 data/
-│   ├── 🎥 *.mp4                     # Input video files
-│   ├── 📄 gait_keypoints.csv        # Extracted keypoints
-│   └── 📁 processed/
-│       ├── 🧮 X.npy                 # Feature matrix
-│       ├── 🏷️ y.npy                  # Labels
-│       └── 📋 labels.json           # Label mapping
-├── 📁 src/
-│   ├── 📁 preprocessing/
-│   │   ├── 🔧 extract_gait.py       # Extract gait from videos
-│   │   └── 🔄 preprocess_gait.py    # Feature engineering
-│   ├── 📁 models/
-│   │   ├── 🎯 train_baseline.py     # Train ML models
-│   │   ├── 🔬 hyperparameter_tuning.py  # Optimize models
-│   │   └── 🧠 deep_learning_models.py   # Neural networks
-│   └── 📁 utils/
-│       └── 📊 visualize_gait.py     # Visualization tools
-├── 📁 models/                       # Saved trained models
-├── 📁 evaluation_results/           # Model evaluation outputs
-├── 🚀 detect_deepfake.py           # Main detection script
-├── 📈 evaluation_and_visualization.py  # Comprehensive evaluation
-├── 🎨 visualize_menu.py            # Visualization interface
-├── 📋 requirements.txt             # Dependencies
-└── 📚 README.md                    # This file
-```
-
-## ⚙️ Installation
-
-### Prerequisites
-
-- Python 3.8+
-- Webcam or MP4 video files
-- At least 4GB RAM (8GB recommended)
-- CUDA-compatible GPU (optional, for deep learning)
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/your-username/DeepFake-Detection.git
-cd DeepFake-Detection
-```
-
-### 2. Create Virtual Environment
-
-```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
-
-# Linux/Mac
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Verify Installation
-
-```bash
-python -c "import cv2, mediapipe, sklearn, numpy, pandas; print('✅ All dependencies installed successfully!')"
-```
-
-## 🚀 Quick Start
-
-### 30-Second Demo
-
-1. **Add your videos** to the `data/` folder (MP4 format)
-2. **Extract gait patterns**:
-   ```bash
-   python src/preprocessing/extract_gait.py
-   ```
-3. **Preprocess data**:
-   ```bash
-   python src/preprocessing/preprocess_gait.py
-   ```
-4. **Train models**:
-   ```bash
-   python src/models/train_baseline.py
-   ```
-5. **Detect deepfakes**:
-   ```bash
-   python detect_deepfake.py data/your_video.mp4
-   ```
-
-That's it! 🎉 You'll get a prediction with confidence score.
-
-## 📖 Detailed Usage Guide
-
-### 1. Data Preprocessing
-
-#### Extract Gait from Videos
-
-```bash
-# Extract from all MP4 files in data folder
+```powershell
+# 1. Extract gait keypoints from videos
 python src/preprocessing/extract_gait.py
 
-# Output: data/gait_keypoints.csv with pose landmarks
-```
-
-**What it does:**
-
-- Processes all `.mp4` files in the `data/` directory
-- Extracts 33 MediaPipe pose landmarks per frame
-- Saves combined results with video identification
-- Reports detection statistics
-
-#### Feature Engineering
-
-```bash
-# Convert raw keypoints to ML-ready features
+# 2. Preprocess into training features
 python src/preprocessing/preprocess_gait.py
 
-# Outputs:
-# - data/processed/X.npy (feature matrix)
-# - data/processed/y.npy (labels)
-# - data/processed/labels.json (label mapping)
+# 3. Train all models
+python src/models/train_models.py
+
+# 4. Evaluate and generate confusion matrices
+python src/models/evaluate_models.py
+
+# 5. Test on a video
+python detect.py data/videos/Arhaan_F1.mp4
 ```
 
-**What it does:**
+---
 
-- Normalizes gait sequences using torso length
-- Computes joint angles (hip-knee-ankle, elbow angles)
-- Resamples sequences to uniform length (64 frames)
-- Creates synthetic deepfake data for training
-- Generates final feature matrix (70 features per frame)
+## Pipeline Overview
 
-### 2. Gait Visualization
-
-```bash
-# Interactive visualization menu
-python visualize_menu.py
-
-# Available options:
-# 1. Static pose plots
-# 2. Animated gait sequences
-# 3. Joint angle analysis
-# 4. Feature distribution plots
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│  Raw Videos     │───▶│  Pose Keypoints  │───▶│  Training Data  │
+│  data/videos/   │    │  (MediaPipe)     │    │  data/processed/│
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                                        │
+                       ┌────────────────────────────────┘
+                       ▼
+              ┌─────────────────┐    ┌──────────────────┐
+              │  Train Models   │───▶│  Evaluate Models │
+              │  (7 architectures)   │  (Confusion Matrix)
+              └─────────────────┘    └──────────────────┘
 ```
 
-**Visualization Features:**
+---
 
-- 📊 Pose landmark scatter plots
-- 🎬 Animated walking sequences
-- 📈 Joint angle time series
-- 🎯 Feature distribution analysis
-- 👥 Person-wise comparisons
+## Step-by-Step Instructions
 
-### 3. Model Training
+### Step 1: Extract Gait Keypoints
 
-#### Train Baseline Models
+Extract pose landmarks from all videos using MediaPipe:
 
-```bash
-# Train multiple ML algorithms
-python src/models/train_baseline.py
+```powershell
+python src/preprocessing/extract_gait.py
+```
 
-# Models trained:
-# - RandomForest
-# - SVM
-# - Logistic Regression
-# - K-Nearest Neighbors
-# - Gradient Boosting
+**Output:** `data/gait_keypoints.csv` containing 33 body landmarks per frame
+
+---
+
+### Step 2: Preprocess Data
+
+Convert raw keypoints into normalized feature matrices:
+
+```powershell
+python src/preprocessing/preprocess_gait.py
 ```
 
 **Output:**
+- `data/processed/X.npy` - Feature matrices (N, 64, 70)
+- `data/processed/y.npy` - Labels
+- `data/processed/labels.json` - Label mapping
 
-- Trained models saved in `models/` directory
-- Performance metrics and comparison
-- Best model automatically selected
-- Cross-validation results
+---
 
-#### Training Configuration
+### Step 3: Train Models
 
-```python
-# Customize training in train_baseline.py
-MODELS_CONFIG = {
-    'test_size': 0.2,        # 20% data for testing
-    'cv_folds': 5,           # 5-fold cross-validation
-    'random_state': 42,      # Reproducible results
-    'n_jobs': -1            # Use all CPU cores
-}
+Train all 7 deep learning architectures:
+
+```powershell
+python src/models/train_models.py
 ```
 
-### 4. Hyperparameter Tuning
+**Options:**
+```powershell
+# Custom epochs and batch size
+python src/models/train_models.py --epochs 100 --batch_size 32
 
-```bash
-# Optimize model parameters
-python src/models/hyperparameter_tuning.py
-
-# Methods:
-# 1. Grid Search (thorough)
-# 2. Random Search (faster)
-# 3. Model comparison
-# 4. Best model selection
+# Train specific models only
+python src/models/train_models.py --models LSTM BiLSTM CNN_LSTM
 ```
 
-**Tuning Process:**
+**Available Models:**
+| Model | Description |
+|-------|-------------|
+| LSTM | Basic temporal modeling |
+| BiLSTM | Bidirectional LSTM |
+| GRU | Gated Recurrent Unit |
+| CNN | 1D Convolution |
+| CNN_LSTM | Hybrid CNN + LSTM |
+| CNN_Transformer | CNN + Transformer attention |
+| Attention_LSTM | Self-attention + LSTM |
 
-1. **Grid Search**: Exhaustive parameter exploration
-2. **Random Search**: Efficient parameter sampling
-3. **Cross-validation**: Robust performance estimation
-4. **Model Selection**: Best performing configuration
+**Output:**
+- `models/*.keras` - Trained model files
+- `models/best_model_info.json` - Best model metadata
+- `results/training_results_*.json` - Training metrics
 
-### 5. Deep Learning Models
+---
 
-```bash
-# Train neural networks (requires TensorFlow)
-python src/models/deep_learning_models.py
+### Step 4: Evaluate Models
 
-# Architectures:
-# - LSTM (temporal patterns)
-# - CNN (spatial features)
-# - Hybrid (CNN + LSTM)
+Generate confusion matrices and performance reports:
+
+```powershell
+python src/models/evaluate_models.py
 ```
 
-**Deep Learning Features:**
+**Output:**
+- `results/confusion_matrices.png` - Confusion matrix plots
+- `results/model_comparison.png` - Performance bar chart
+- `results/evaluation_report_*.txt` - Detailed text report
 
-- 🧠 **LSTM**: Captures temporal gait dynamics
-- 🖼️ **CNN**: Extracts spatial pose patterns
-- 🔄 **Hybrid**: Combines spatial and temporal analysis
-- 📊 **Advanced Metrics**: Precision, recall, F1-score, AUC
+---
 
-### 6. Model Evaluation
+### Step 5: Test Detection
 
-```bash
-# Comprehensive model analysis
-python evaluation_and_visualization.py
+Test the trained model on a video:
 
-# Generates:
-# - Confusion matrices
-# - ROC curves
-# - Precision-recall curves
-# - Model comparison charts
-# - Detailed performance report
+```powershell
+# Single video
+python detect.py data/videos/Arhaan_F1.mp4
+
+# Verify claimed identity
+python detect.py video.mp4 --identity Arhaan
+
+# Batch process folder
+python detect.py data/videos/ --batch -o results.json
 ```
 
-**Evaluation Outputs:**
+---
 
-- 📊 `evaluation_results/model_comparison.png`
-- 📈 `evaluation_results/combined_roc_curves.png`
-- 📋 `evaluation_results/evaluation_report.txt`
-- 🎯 Individual model performance plots
+## Data Augmentation (Optional)
 
-### 7. Deepfake Detection
+If you need more training data:
 
-#### Single Video Analysis
+```powershell
+# Extract frames from videos
+python src/preprocessing/video_to_frames.py
 
-```bash
-# Analyze one video
-python detect_deepfake.py path/to/video.mp4
+# Apply 5 augmentations per video
+python src/preprocessing/augment_frames.py
 
-# With custom threshold
-python detect_deepfake.py video.mp4 --threshold 0.7
-
-# Save results to JSON
-python detect_deepfake.py video.mp4 --output results.json
+# Convert frames back to videos
+python src/preprocessing/frames_to_video.py
 ```
 
-#### Batch Processing
+---
 
-```bash
-# Analyze all videos in directory
-python detect_deepfake.py data/ --batch
+## Project Structure
 
-# Batch with output file
-python detect_deepfake.py data/ --batch --output batch_results.json
+```
+DeepFake-Detection/
+├── data/
+│   ├── videos/              # Input videos (PersonName_F1.mp4, etc.)
+│   ├── frames/              # Extracted frames
+│   ├── frames_augmented/    # Augmented frames
+│   ├── processed/           # Training data (X.npy, y.npy)
+│   └── gait_keypoints.csv   # Raw pose keypoints
+├── models/                  # Trained model files
+├── results/                 # Evaluation results
+├── src/
+│   ├── preprocessing/       # Data preprocessing scripts
+│   └── models/              # Model architectures & training
+├── detect.py                # Main detection script
+└── README.md
 ```
 
-**Detection Output:**
+---
 
-```json
-{
-  "video_path": "data/test_video.mp4",
-  "prediction": "Deepfake",
-  "deepfake_probability": 0.824,
-  "confidence": 0.824,
-  "threshold": 0.5,
-  "model_type": "RandomForest",
-  "frames_analyzed": 127
-}
-```
+## Requirements
 
-## 🎥 Testing with Your Videos
-
-### Supported Formats
-
-- ✅ MP4 (recommended)
-- ✅ AVI
-- ✅ MOV
-- ✅ WEBM
-
-### Video Requirements
-
-- **Resolution**: 480p or higher recommended
-- **Duration**: 2-30 seconds optimal
-- **Content**: Clear view of person walking/moving
-- **Quality**: Good lighting, minimal occlusion
-
-### Test Video Preparation
-
-```bash
-# 1. Add videos to data folder
-cp your_videos/*.mp4 data/
-
-# 2. Verify video format
-python -c "import cv2; cap = cv2.VideoCapture('data/test.mp4'); print(f'Video OK: {cap.isOpened()}')"
-
-# 3. Quick detection test
-python detect_deepfake.py data/test.mp4
-```
-
-### Expected Results
-
-- **Authentic Video**: `prediction: "Authentic"`, confidence > 0.6
-- **Deepfake Video**: `prediction: "Deepfake"`, confidence > 0.6
-- **Low Confidence**: May indicate poor video quality or edge cases
-
-## 📊 Model Performance
-
-### Baseline Performance (Example)
-
-| Model               | Accuracy | Precision | Recall | F1-Score | AUC   |
-| ------------------- | -------- | --------- | ------ | -------- | ----- |
-| RandomForest        | 0.892    | 0.885     | 0.891  | 0.888    | 0.924 |
-| SVM                 | 0.876    | 0.872     | 0.879  | 0.875    | 0.918 |
-| Logistic Regression | 0.834    | 0.829     | 0.831  | 0.830    | 0.902 |
-| KNN                 | 0.823    | 0.818     | 0.825  | 0.821    | 0.889 |
-| Gradient Boosting   | 0.887    | 0.883     | 0.884  | 0.883    | 0.921 |
-
-### Deep Learning Performance
-
-| Model  | Accuracy | Precision | Recall | F1-Score | Parameters |
-| ------ | -------- | --------- | ------ | -------- | ---------- |
-| LSTM   | 0.914    | 0.908     | 0.912  | 0.910    | 124K       |
-| CNN    | 0.901    | 0.896     | 0.903  | 0.899    | 89K        |
-| Hybrid | 0.923    | 0.919     | 0.921  | 0.920    | 156K       |
-
-### Performance Factors
-
-- **Data Quality**: Clean pose detection improves accuracy
-- **Video Length**: 2-10 seconds optimal for gait analysis
-- **Movement Type**: Walking/running works best
-- **Background**: Minimal interference preferred
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-#### 1. "No module named 'tensorflow'"
-
-```bash
-# Install TensorFlow
-pip install tensorflow
-
-# For GPU support
-pip install tensorflow-gpu
-```
-
-#### 2. "MediaPipe pose detection failed"
-
-```bash
-# Check video file
-python -c "import cv2; print(cv2.VideoCapture('your_video.mp4').isOpened())"
-
-# Verify MediaPipe
-python -c "import mediapipe as mp; print('MediaPipe OK')"
-```
-
-#### 3. "No pose landmarks detected"
-
-- Ensure person is visible in video
-- Check lighting conditions
-- Verify video quality and resolution
-- Try different video or adjust detection confidence
-
-#### 4. "Insufficient training data"
-
-```bash
-# Check data files
-ls data/processed/
-# Should contain: X.npy, y.npy, labels.json
-
-# Regenerate if missing
-python src/preprocessing/preprocess_gait.py
-```
-
-#### 5. "Model not found"
-
-```bash
-# Train models first
-python src/models/train_baseline.py
-
-# Check models directory
-ls models/
-```
-
-### Performance Optimization
-
-#### Speed Up Training
-
-```python
-# Reduce cross-validation folds
-cv_folds = 3  # instead of 5
-
-# Use fewer hyperparameters
-n_iter = 20  # for random search
-
-# Limit model complexity
-max_depth = 10  # for tree-based models
-```
-
-#### Memory Optimization
-
-```python
-# Process videos in smaller batches
-batch_size = 16  # for deep learning
-
-# Reduce sequence length
-target_frames = 32  # instead of 64
-
-# Use feature selection
-from sklearn.feature_selection import SelectKBest
-```
-
-### Debug Mode
-
-```bash
-# Enable verbose logging
-export PYTHONPATH="."
-python -v detect_deepfake.py video.mp4
-
-# Check intermediate outputs
-python src/preprocessing/extract_gait.py --debug
-
-# Validate data integrity
-python -c "import numpy as np; X = np.load('data/processed/X.npy'); print(f'Data shape: {X.shape}, No NaN: {not np.isnan(X).any()}')"
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how to get started:
-
-### Development Setup
-
-```bash
-# Fork and clone the repository
-git clone https://github.com/your-username/DeepFake-Detection.git
-cd DeepFake-Detection
-
-# Create development branch
-git checkout -b feature/your-feature-name
-
-# Install development dependencies
+```powershell
 pip install -r requirements.txt
-pip install pytest black flake8  # for testing and code formatting
 ```
 
-### Code Style
-
-```bash
-# Format code
-black src/ --line-length 88
-
-# Check style
-flake8 src/ --max-line-length 88
-
-# Run tests
-pytest tests/
-```
-
-### Contribution Areas
-
-- 🚀 **New Models**: Implement additional ML algorithms
-- 📊 **Visualization**: Create new plot types and analysis tools
-- 🎥 **Video Processing**: Support more formats and preprocessing options
-- 📱 **Mobile Support**: Optimize for mobile deployment
-- 🔧 **Performance**: Speed and memory optimizations
-- 📚 **Documentation**: Improve guides and examples
-
-### Pull Request Process
-
-1. Create feature branch
-2. Add tests for new functionality
-3. Update documentation
-4. Ensure all tests pass
-5. Submit pull request with clear description
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🎯 Quick Commands Reference
-
-```bash
-# Complete pipeline (first time)
-python src/preprocessing/extract_gait.py
-python src/preprocessing/preprocess_gait.py
-python src/models/train_baseline.py
-python detect_deepfake.py your_video.mp4
-
-# Hyperparameter tuning
-python src/models/hyperparameter_tuning.py
-
-# Deep learning training
-python src/models/deep_learning_models.py
-
-# Comprehensive evaluation
-python evaluation_and_visualization.py
-
-# Batch detection
-python detect_deepfake.py data/ --batch --output results.json
-
-# Visualization
-python visualize_menu.py
-```
-
-## 📞 Support
-
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/your-username/DeepFake-Detection/issues)
-- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/your-username/DeepFake-Detection/discussions)
-- 📧 **Email**: your-email@domain.com
-- 📖 **Documentation**: [Wiki](https://github.com/your-username/DeepFake-Detection/wiki)
-
----
-
-Made with ❤️ for advancing deepfake detection research
-
-**⭐ Star this repo if you find it useful!**DeepFake-Detection
-Using gait analysis to study a person’s walking patterns in order to determine if a video or media depicts the real individual or a manipulated deepfake.
+Key dependencies:
+- TensorFlow 2.x
+- MediaPipe
+- OpenCV
+- scikit-learn
+- numpy, pandas
+- matplotlib, seaborn (for visualization)

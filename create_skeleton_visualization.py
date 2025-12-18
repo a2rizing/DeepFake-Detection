@@ -19,13 +19,13 @@ def create_skeleton_visualization():
     print("="*80)
     
     # Find a sample video
-    video_files = [f for f in os.listdir('data') if f.endswith('.mp4')]
+    video_files = [f for f in os.listdir('data/videos') if f.endswith('.mp4')]
     
     if not video_files:
-        print("❌ No videos found in data/ folder")
+        print("❌ No videos found in data/videos/ folder")
         return
     
-    video_path = os.path.join('data', video_files[0])
+    video_path = os.path.join('data/videos', video_files[0])
     print(f"\n📹 Using video: {video_files[0]}")
     
     # Initialize MediaPipe

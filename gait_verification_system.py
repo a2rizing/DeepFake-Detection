@@ -95,7 +95,7 @@ def verify_identity(video_path, claimed_identity):
     labels = json.load(open('data/processed/labels.json'))
     
     # Get list of all video files to check if this is a training video
-    all_videos = sorted([f for f in os.listdir('data') if f.endswith('.mp4')])
+    all_videos = sorted([f for f in os.listdir('data/videos') if f.endswith('.mp4')])
     video_name = os.path.basename(video_path)
     
     # Get claimed identity ID
