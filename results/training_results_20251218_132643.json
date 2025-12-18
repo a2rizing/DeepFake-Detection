@@ -1,0 +1,86 @@
+{
+  "LSTM": {
+    "metrics": {
+      "loss": 2.567753314971924,
+      "accuracy": 0.1875,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "training_epochs": 37,
+    "final_train_acc": 0.13080169260501862,
+    "final_val_acc": 0.13924050331115723
+  },
+  "BiLSTM": {
+    "metrics": {
+      "loss": 2.4798192977905273,
+      "accuracy": 0.16249999403953552,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "training_epochs": 100,
+    "final_train_acc": 0.07594936341047287,
+    "final_val_acc": 0.18987341225147247
+  },
+  "GRU": {
+    "metrics": {
+      "loss": 1.5012147426605225,
+      "accuracy": 0.550000011920929,
+      "precision": 0.9599999785423279,
+      "recall": 0.30000001192092896,
+      "f1": 0.45714286855018565
+    },
+    "training_epochs": 100,
+    "final_train_acc": 0.5316455960273743,
+    "final_val_acc": 0.6202531456947327
+  },
+  "CNN": {
+    "metrics": {
+      "loss": 0.3033025860786438,
+      "accuracy": 0.925000011920929,
+      "precision": 0.9220778942108154,
+      "recall": 0.887499988079071,
+      "f1": 0.904458579129537
+    },
+    "training_epochs": 83,
+    "final_train_acc": 0.9535865187644958,
+    "final_val_acc": 0.9113923907279968
+  },
+  "CNN_LSTM": {
+    "metrics": {
+      "loss": 0.8275264501571655,
+      "accuracy": 0.7875000238418579,
+      "precision": 0.9791666865348816,
+      "recall": 0.5874999761581421,
+      "f1": 0.7343749869614833
+    },
+    "training_epochs": 57,
+    "final_train_acc": 0.7130801677703857,
+    "final_val_acc": 0.7341772317886353
+  },
+  "CNN_Transformer": {
+    "metrics": {
+      "loss": 2.632086992263794,
+      "accuracy": 0.07500000298023224,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "training_epochs": 11,
+    "final_train_acc": 0.7299578189849854,
+    "final_val_acc": 0.15189872682094574
+  },
+  "Attention_LSTM": {
+    "metrics": {
+      "loss": 2.007341146469116,
+      "accuracy": 0.36250001192092896,
+      "precision": 1.0,
+      "recall": 0.10000000149011612,
+      "f1": 0.18181818428118365
+    },
+    "training_epochs": 100,
+    "final_train_acc": 0.350210964679718,
+    "final_val_acc": 0.39240506291389465
+  }
+}

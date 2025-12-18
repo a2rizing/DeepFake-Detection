@@ -231,15 +231,13 @@ class GaitModelBuilder:
     # ==================== UTILITY ====================
     
     def build_all_models(self):
-        """Build all available model architectures"""
+        """Build all available model architectures (only proven performers)"""
+        # Note: LSTM, BiLSTM, CNN_Transformer, Attention_LSTM removed due to poor performance
+        # (0-18% F1 score in testing). Keeping only models that showed meaningful learning.
         models = {
-            'LSTM': self.build_lstm(),
-            'BiLSTM': self.build_bilstm(),
-            'GRU': self.build_gru(),
-            'CNN': self.build_cnn(),
-            'CNN_LSTM': self.build_cnn_lstm(),
-            'CNN_Transformer': self.build_cnn_transformer(),
-            'Attention_LSTM': self.build_attention_lstm()
+            'CNN': self.build_cnn(),           # Best performer: 92.5% accuracy, 0.90 F1
+            'CNN_LSTM': self.build_cnn_lstm(), # Good performer: 78.75% accuracy, 0.73 F1
+            'GRU': self.build_gru(),           # Moderate: 55% accuracy, 0.46 F1
         }
         return models
     

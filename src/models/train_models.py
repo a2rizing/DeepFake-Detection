@@ -90,12 +90,14 @@ class ModelTrainer:
         
         # Get number of classes
         num_classes = len(np.unique(y))
+        samples_per_class = len(X) / num_classes
+        
         print(f"\n📊 Dataset Statistics:")
         print(f"   Total samples: {len(X)}")
         print(f"   Number of classes: {num_classes}")
+        print(f"   Avg samples per class: {samples_per_class:.1f}")
         
         # For person verification, we need at least 2 classes
-        # Convert to person identification task
         if num_classes < 2:
             print("⚠️ Only one class found. Need at least 2 for classification.")
             return None
@@ -107,19 +109,42 @@ class ModelTrainer:
         # Convert to one-hot
         y_onehot = keras.utils.to_categorical(y_encoded, num_classes=num_classes)
         
-        # Split data
-        # First split: train+val vs test
-        X_temp, X_test, y_temp, y_test = train_test_split(
-            X, y_onehot, test_size=test_size, random_state=42, 
-            stratify=y_encoded
-        )
+        # Check if we have enough samples per class for stratified split
+        class_counts = np.bincount(y_encoded)
+        min_samples = class_counts.min()
         
-        # Second split: train vs val
-        y_temp_encoded = np.argmax(y_temp, axis=1)
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_temp, y_temp, test_size=val_size/(1-test_size), random_state=42,
-            stratify=y_temp_encoded
-        )
+        if min_samples < 3:
+            print(f"\n⚠️ WARNING: Small dataset detected!")
+            print(f"   Minimum samples per class: {min_samples}")
+            print(f"   Using simple holdout split (no stratification)")
+            
+            # Shuffle data
+            indices = np.random.permutation(len(X))
+            X_shuffled = X[indices]
+            y_shuffled = y_onehot[indices]
+            
+            # Simple split: 60% train, 20% val, 20% test
+            n_train = int(len(X) * 0.6)
+            n_val = int(len(X) * 0.2)
+            
+            X_train = X_shuffled[:n_train]
+            y_train = y_shuffled[:n_train]
+            X_val = X_shuffled[n_train:n_train+n_val]
+            y_val = y_shuffled[n_train:n_train+n_val]
+            X_test = X_shuffled[n_train+n_val:]
+            y_test = y_shuffled[n_train+n_val:]
+        else:
+            # Normal stratified split
+            X_temp, X_test, y_temp, y_test = train_test_split(
+                X, y_onehot, test_size=test_size, random_state=42, 
+                stratify=y_encoded
+            )
+            
+            y_temp_encoded = np.argmax(y_temp, axis=1)
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_temp, y_temp, test_size=val_size/(1-test_size), random_state=42,
+                stratify=y_temp_encoded
+            )
         
         print(f"   Train samples: {len(X_train)}")
         print(f"   Validation samples: {len(X_val)}")

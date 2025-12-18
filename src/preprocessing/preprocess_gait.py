@@ -289,8 +289,9 @@ def build_dataset_from_combined_csv(csv_path, out_dir, target_frames=64, include
             
         feat = sequence_to_feature_matrix(arr, include_angles=include_angles, target_frames=target_frames)  # (T, D)
         
-        # Use video name as label
-        label_name = video_name
+        # Extract person name from video name (e.g., "Arhaan_F1" -> "Arhaan")
+        # This groups all videos from same person under one label
+        label_name = video_name.split('_')[0]
         if label_name not in label_map:
             label_map[label_name] = next_label
             next_label += 1
@@ -298,7 +299,7 @@ def build_dataset_from_combined_csv(csv_path, out_dir, target_frames=64, include
         
         X_list.append(feat)     # (T, D)
         y_list.append(label_id)
-        print(f"[INFO] Video {video_name} -> label {label_id}, feature shape: {feat.shape}")
+        print(f"[INFO] Video {video_name} -> person '{label_name}' (label {label_id}), feature shape: {feat.shape}")
     
     if not X_list:
         raise RuntimeError("No valid videos processed!")

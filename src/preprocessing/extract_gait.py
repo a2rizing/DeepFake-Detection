@@ -51,13 +51,26 @@ def extract_gait(video_path, output_csv="data/gait_keypoints.csv"):
     
     return df
 
-def process_multiple_videos(data_folder="data", output_csv="data/gait_keypoints.csv"):
+def process_multiple_videos(data_folder="data", output_csv="data/gait_keypoints.csv", recursive=False):
     """
-    Process all MP4 files in the data folder and extract gait keypoints
+    Process all MP4 files in the data folder and extract gait keypoints.
+    
+    Args:
+        data_folder: Folder containing videos
+        output_csv: Output CSV path
+        recursive: If True, search recursively in subfolders
     """
-    # Find all MP4 files in the data folder
-    video_pattern = os.path.join(data_folder, "*.mp4")
-    video_files = glob.glob(video_pattern)
+    # Find all MP4 files
+    if recursive:
+        # Recursively find all MP4 files in nested folders
+        video_files = []
+        for root, dirs, files in os.walk(data_folder):
+            for file in files:
+                if file.lower().endswith('.mp4'):
+                    video_files.append(os.path.join(root, file))
+    else:
+        video_pattern = os.path.join(data_folder, "*.mp4")
+        video_files = glob.glob(video_pattern)
     
     if not video_files:
         print(f"[WARNING] No MP4 files found in {data_folder}")
@@ -67,8 +80,8 @@ def process_multiple_videos(data_folder="data", output_csv="data/gait_keypoints.
     
     all_dataframes = []
     
-    for video_file in video_files:
-        print(f"[INFO] Processing: {os.path.basename(video_file)}")
+    from tqdm import tqdm
+    for video_file in tqdm(video_files, desc="Extracting keypoints"):
         df = extract_gait(video_file)
         if not df.empty:
             all_dataframes.append(df)
@@ -77,21 +90,41 @@ def process_multiple_videos(data_folder="data", output_csv="data/gait_keypoints.
         # Combine all dataframes
         combined_df = pd.concat(all_dataframes, ignore_index=True)
         
-        # Ensure data folder exists
-        os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+        # Ensure output folder exists
+        os.makedirs(os.path.dirname(output_csv) if os.path.dirname(output_csv) else ".", exist_ok=True)
         combined_df.to_csv(output_csv, index=False)
         
-        print(f"[INFO] Combined gait keypoints from {len(all_dataframes)} videos saved to {output_csv}")
+        print(f"\n[INFO] Combined gait keypoints from {len(all_dataframes)} videos saved to {output_csv}")
         print(f"[INFO] Total frames processed: {len(combined_df)}")
         
-        # Print summary by video
-        video_summary = combined_df.groupby('video_name').size()
-        print("[INFO] Frames per video:")
-        for video, count in video_summary.items():
-            print(f"  {video}: {count} frames")
+        # Print summary by person (extracted from video name)
+        combined_df['person'] = combined_df['video_name'].apply(lambda x: x.split('_')[0])
+        person_summary = combined_df.groupby('person')['video_name'].nunique()
+        print("\n[INFO] Videos per person:")
+        for person, count in person_summary.items():
+            print(f"  {person}: {count} videos")
     else:
         print("[ERROR] No valid keypoints extracted from any video")
 
 if __name__ == "__main__":
-    # Process all MP4 files in the data folder
-    process_multiple_videos("data", "data/gait_keypoints.csv")
+    import argparse
+    parser = argparse.ArgumentParser(description="Extract gait keypoints from videos")
+    parser.add_argument("--input", type=str, default="data/videos",
+                        help="Input folder with videos (default: data/videos)")
+    parser.add_argument("--output", type=str, default="data/gait_keypoints.csv",
+                        help="Output CSV path (default: data/gait_keypoints.csv)")
+    parser.add_argument("--recursive", "-r", action="store_true",
+                        help="Recursively search subfolders for videos")
+    
+    args = parser.parse_args()
+    
+    print("=" * 60)
+    print("GAIT KEYPOINT EXTRACTION")
+    print("=" * 60)
+    print(f"Input folder: {args.input}")
+    print(f"Output CSV: {args.output}")
+    print(f"Recursive: {args.recursive}")
+    print("=" * 60)
+    
+    process_multiple_videos(args.input, args.output, recursive=args.recursive)
+
