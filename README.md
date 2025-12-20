@@ -61,20 +61,14 @@ python src/preprocessing/preprocess_gait.py --input_glob data/gait_keypoints.csv
 
 ```bash
 # Train all models with cross-validation
-python src/models/train_comprehensive.py
-
-# Or train specific model
-python src/models/train_models.py --models CNN_Transformer --epochs 100
+python src/models/train_comprehensive.py --all
 ```
 
 ### 4. Evaluate
 
 ```bash
 # Full evaluation with visualizations
-python src/models/final_evaluation.py
-
-# Test specific model
-python src/models/test_models.py --model models/CNN_Transformer_V2_best.keras --all
+python src/models/final_evaluation.py 
 ```
 
 ### 5. Run Detection
