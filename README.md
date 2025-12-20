@@ -1,84 +1,132 @@
-# Deepfake Detection via Gait Analysis
+# Gait-Based Person Recognition
 
-Gait-based deepfake detection using pose estimation and deep learning models.
+Deep learning pipeline for person identification using gait analysis from video. Achieves **98.99% accuracy** on 13-person dataset.
+
+## Setup
+
+### Prerequisites: Git LFS
+
+This project uses Git LFS for large CSV files. Install it first:
+
+```bash
+# Windows (using Chocolatey or direct download)
+choco install git-lfs
+# OR download from https://git-lfs.com
+
+# Linux
+sudo apt-get install git-lfs
+
+# macOS
+brew install git-lfs
+```
+
+Then initialize Git LFS in the repository:
+
+```bash
+git lfs install
+git lfs pull  # Download the CSV files
+```
+
+### Python Environment
+
+```bash
+# Create virtual environment
+python -m venv venv
+venv\Scripts\activate  # Windows
+source venv/bin/activate  # Linux/Mac
+
+# Install dependencies
+pip install -r requirements.txt
+```
 
 ## Quick Start
 
-### 1. Extract Gait Keypoints
+### 1. Prepare Data
+
+Place videos in `data/videos_augmented/{PersonName}/{F|S}/` structure:
+- `F` = Front view, `S` = Side view
+- Example: `data/videos_augmented/Aarav/F/Aarav_F1_original.mp4`
+
+### 2. Extract Keypoints & Preprocess
+
 ```bash
+# Extract pose keypoints from videos
 python src/preprocessing/extract_gait.py --input data/videos_augmented --output data/gait_keypoints.csv --recursive
+
+# Preprocess for training (creates X.npy, y.npy, labels.json)
+python src/preprocessing/preprocess_gait.py --input_glob data/gait_keypoints.csv --out_dir data/processed_augmented
 ```
 
-### 2. Preprocess Data for Training
+### 3. Train Models
+
 ```bash
-python src/preprocessing/preprocess_gait.py --input_glob data/gait_keypoints.csv --out_dir data/processed
+# Train all models with cross-validation
+python src/models/train_comprehensive.py
+
+# Or train specific model
+python src/models/train_models.py --models CNN_Transformer --epochs 100
 ```
 
-### 3. Train All Models
+### 4. Evaluate
+
 ```bash
-python src/models/train_models.py --data_dir data/processed --epochs 50 --batch_size 32
+# Full evaluation with visualizations
+python src/models/final_evaluation.py
+
+# Test specific model
+python src/models/test_models.py --model models/CNN_Transformer_V2_best.keras --all
 ```
 
-Train specific models only:
+### 5. Run Detection
+
 ```bash
-python src/models/train_models.py --models CNN LSTM CNN_LSTM
+python detect.py path/to/video.mp4
 ```
-
-### 4. Run Detection
-```bash
-python detect.py <video_path>
-```
-
----
 
 ## Project Structure
 
 ```
-DeepFake-Detection/
-├── data/
-│   ├── videos/              # Original videos
-│   ├── videos_augmented/    # Augmented videos ({Person}/{F|S}/*.mp4)
-│   ├── gait_keypoints.csv   # Extracted pose keypoints
-│   └── processed/           # Training-ready numpy arrays
-│       ├── X.npy            # Features (N, seq_len, features)
-│       ├── y.npy            # Labels
-│       └── labels.json      # Label mapping
-├── models/                  # Saved trained models (.keras)
-├── results/                 # Training results and metrics
 ├── src/
-│   ├── preprocessing/
-│   │   ├── extract_gait.py      # MediaPipe pose extraction
-│   │   └── preprocess_gait.py   # Feature normalization
-│   └── models/
-│       ├── models_extended.py   # Model architectures
-│       ├── train_models.py      # Training script
-│       └── evaluate_models.py   # Evaluation metrics
-└── detect.py                # Main detection script
+│   ├── preprocessing/     # Keypoint extraction & data prep
+│   ├── models/           # Model architectures & training
+│   └── visualization/    # GradCAM & interpretability
+├── data/                 # Videos & processed data (gitignored)
+├── models/               # Trained models (gitignored)
+├── results/              # Metrics & visualizations (gitignored)
+└── detect.py            # Main detection script
 ```
 
-## Video Naming Convention
-
-- **F** = FrontView (videos recorded from the front)
-- **S** = SideView (videos recorded from the side)
-- Pattern: `{PersonName}_{View}{Number}_{AugmentationType}.mp4`
-- Example: `Arhaan_F1_aug3_brightness.mp4`
-
-## Available Models
+## Models
 
 | Model | Description |
 |-------|-------------|
-| LSTM | Basic temporal sequence modeling |
-| BiLSTM | Bidirectional LSTM for forward/backward context |
-| GRU | Faster LSTM alternative |
-| CNN | 1D CNN for spatial pattern extraction |
-| CNN_LSTM | Hybrid spatial + temporal features |
-| CNN_Transformer | CNN + self-attention mechanism |
-| Attention_LSTM | Self-attention + LSTM |
+| Enhanced_LSTM | 3-layer LSTM with recurrent dropout |
+| Enhanced_BiLSTM | Bidirectional LSTM + attention |
+| CNN_Transformer_V2 | CNN + Transformer (best performer) |
+| MultiScale_CNN | Parallel convolutions (3,5,7 kernels) |
+| ResNet_CNN | 1D ResNet with skip connections |
 
-## Future Improvements
+## Key Scripts
 
-- [ ] GradCAM visualization for model interpretability
-- [ ] Vision Transformers (ViT) for video analysis
-- [ ] Ensemble methods for improved accuracy
-- [ ] Hyperparameter tuning with Optuna/Ray Tune
-- [ ] Boosting methods (XGBoost, LightGBM)
+| Script | Purpose |
+|--------|---------|
+| `train_comprehensive.py` | Full training with CV & regularization |
+| `test_models.py` | Test models, per-person accuracy |
+| `final_evaluation.py` | Complete evaluation + visualizations |
+| `build_ensemble.py` | Create ensemble from top models |
+| `hyperparameter_tuning.py` | Grid search with Keras Tuner |
+
+## Results
+
+- **Accuracy**: 98.99%
+- **ROC-AUC**: 99.84%
+- **10/13 persons**: 100% accuracy
+- **Deepfake detection**: Low confidence flagging works
+
+## Requirements
+
+- Python 3.8+
+- TensorFlow 2.x
+- MediaPipe
+- OpenCV
+- scikit-learn

@@ -4,9 +4,11 @@ DeepFake Detection using Gait Analysis
 Main entry point for video authentication
 
 Usage:
-    python detect.py <video_path>                    # Single video
-    python detect.py <video_path> --threshold 0.7   # Custom threshold
-    python detect.py <directory> --batch            # Batch processing
+    python detect.py <video_path>                              # Single video (classification)
+    python detect.py <video_path> --threshold 0.7              # Custom threshold
+    python detect.py <directory> --batch                       # Batch processing
+    python detect.py <video_path> --verify --identity Aarav    # Verification mode
+    python detect.py <video_path> --verify --identity Aarav --threshold 0.8
 """
 
 import argparse
@@ -20,6 +22,9 @@ from datetime import datetime
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Import verification components
+from src.verification import GaitVerifier, VerificationResult
 
 
 class GaitDetector:
@@ -351,36 +356,170 @@ class GaitDetector:
         return results
 
 
+def print_verification_result(result: VerificationResult) -> None:
+    """
+    Print verification result in a clear, formatted way.
+    
+    Args:
+        result: The VerificationResult to display
+    """
+    print(f"\n{'=' * 60}")
+    print("GAIT VERIFICATION RESULT")
+    print(f"{'=' * 60}")
+    
+    if result.status == "error":
+        print(f"\n❌ ERROR: {result.error_message}")
+        print(f"\n   Video: {result.video_path}")
+        print(f"   Claimed Identity: {result.claimed_identity}")
+        return
+    
+    # Main result - AUTHENTIC or NOT_AUTHENTIC
+    if result.is_authentic:
+        print(f"\n✅ AUTHENTIC")
+    else:
+        print(f"\n❌ NOT_AUTHENTIC")
+    
+    # Authenticity score
+    print(f"\n   Authenticity Score: {result.authenticity_score:.2%}")
+    print(f"   Threshold: {result.threshold:.2%}")
+    
+    # Video and identity info
+    print(f"\n   Video: {result.video_path}")
+    print(f"   Claimed Identity: {result.claimed_identity}")
+    print(f"   Frames Analyzed: {result.frames_analyzed}")
+    
+    # Component scores
+    if result.component_scores:
+        print(f"\n   Component Scores:")
+        for component, score in result.component_scores.items():
+            component_name = component.replace("_", " ").title()
+            print(f"      - {component_name}: {score:.2%}")
+    
+    # Reasons
+    if result.reasons:
+        print(f"\n   Analysis Details:")
+        for reason in result.reasons:
+            print(f"      • {reason}")
+    
+    print(f"\n{'=' * 60}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="DeepFake Detection using Gait Analysis",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python detect.py video.mp4                     # Analyze single video
-  python detect.py video.mp4 --identity John     # Verify claimed identity
+  python detect.py video.mp4                     # Analyze single video (classification)
+  python detect.py video.mp4 --identity John     # Verify claimed identity (classification)
   python detect.py videos/ --batch               # Process all videos in folder
   python detect.py videos/ --batch -o results.json
+  
+  # Verification mode (compares against stored gait signatures):
+  python detect.py video.mp4 --verify --identity Aarav
+  python detect.py video.mp4 --verify --identity Aarav --threshold 0.8
+  python detect.py video.mp4 --verify --identity Aarav --signatures-dir data/signatures
         """
     )
     
     parser.add_argument('path', help='Video file or directory path')
     parser.add_argument('--batch', '-b', action='store_true',
                         help='Process all videos in directory')
-    parser.add_argument('--threshold', '-t', type=float, default=0.5,
-                        help='Decision threshold (default: 0.5)')
+    parser.add_argument('--threshold', '-t', type=float, default=None,
+                        help='Decision threshold (default: 0.5 for classification, 0.7 for verification)')
     parser.add_argument('--identity', '-i', type=str,
                         help='Claimed identity to verify')
     parser.add_argument('--output', '-o', type=str,
                         help='Output JSON file for results')
     parser.add_argument('--model', '-m', type=str,
                         help='Path to trained model file')
+    parser.add_argument('--verify', '-v', action='store_true',
+                        help='Use verification mode (compare against stored gait signatures)')
+    parser.add_argument('--signatures-dir', '-s', type=str, default='data/signatures',
+                        help='Directory containing gait signatures (default: data/signatures)')
     
     args = parser.parse_args()
     
     print("\n" + "=" * 60)
     print("DEEPFAKE DETECTION - Gait Analysis System")
     print("=" * 60)
+    
+    # Verification mode
+    if args.verify:
+        if not args.identity:
+            print("[ERROR] --identity is required when using --verify mode")
+            print("   Usage: python detect.py video.mp4 --verify --identity PersonName")
+            sys.exit(1)
+        
+        if not os.path.isfile(args.path):
+            print(f"[ERROR] File not found: {args.path}")
+            sys.exit(1)
+        
+        # Set default threshold for verification mode
+        threshold = args.threshold if args.threshold is not None else 0.7
+        
+        print(f"\n[MODE] Verification - comparing against stored gait signatures")
+        print(f"[INFO] Signatures directory: {args.signatures_dir}")
+        print(f"[INFO] Threshold: {threshold}")
+        
+        # Check if signatures directory exists
+        if not os.path.isdir(args.signatures_dir):
+            print(f"[ERROR] Signatures directory not found: {args.signatures_dir}")
+            print("   Run signature building first: python build_signatures.py data/videos_augmented")
+            sys.exit(1)
+        
+        # Initialize verifier
+        try:
+            verifier = GaitVerifier(
+                signatures_dir=args.signatures_dir,
+                threshold=threshold
+            )
+            
+            known_identities = verifier.get_known_identities()
+            if not known_identities:
+                print(f"[ERROR] No signatures found in {args.signatures_dir}")
+                print("   Run signature building first: python build_signatures.py data/videos_augmented")
+                sys.exit(1)
+            
+            print(f"[OK] Loaded {len(known_identities)} signatures: {', '.join(known_identities)}")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize verifier: {e}")
+            sys.exit(1)
+        
+        # Perform verification
+        result = verifier.verify(args.path, args.identity)
+        
+        # Print formatted result
+        print_verification_result(result)
+        
+        # Save to file if requested
+        if args.output:
+            result_dict = {
+                "video_path": result.video_path,
+                "claimed_identity": result.claimed_identity,
+                "authenticity_score": result.authenticity_score,
+                "is_authentic": result.is_authentic,
+                "threshold": result.threshold,
+                "reasons": result.reasons,
+                "component_scores": result.component_scores,
+                "frames_analyzed": result.frames_analyzed,
+                "timestamp": result.timestamp,
+                "status": result.status,
+                "error_message": result.error_message
+            }
+            with open(args.output, 'w') as f:
+                json.dump(result_dict, f, indent=2)
+            print(f"\nResults saved to: {args.output}")
+        
+        # Exit with appropriate code
+        if result.status == "error":
+            sys.exit(1)
+        sys.exit(0 if result.is_authentic else 1)
+    
+    # Classification mode (original behavior)
+    # Set default threshold for classification mode
+    threshold = args.threshold if args.threshold is not None else 0.5
     
     # Initialize detector
     detector = GaitDetector(model_path=args.model)
@@ -389,12 +528,12 @@ Examples:
         if not os.path.isdir(args.path):
             print(f"[ERROR] Not a directory: {args.path}")
             sys.exit(1)
-        results = detector.batch_detect(args.path, args.threshold, args.output)
+        results = detector.batch_detect(args.path, threshold, args.output)
     else:
         if not os.path.isfile(args.path):
             print(f"[ERROR] File not found: {args.path}")
             sys.exit(1)
-        result = detector.detect(args.path, args.threshold, args.identity)
+        result = detector.detect(args.path, threshold, args.identity)
         
         if args.output:
             with open(args.output, 'w') as f:

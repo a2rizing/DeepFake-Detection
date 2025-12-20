@@ -1,10 +1,8 @@
 {
-  "model_name": "CNN_Transformer_V2",
-  "model_path": "models\\CNN_Transformer_V2_20251218_221634.keras",
-  "accuracy": 0.925,
-  "timestamp": "20251218_221634",
-  "num_classes": 13,
-  "sequence_length": 64,
-  "num_features": 70,
-  "training_mode": "enhanced"
+  "model_name": "Enhanced_LSTM",
+  "val_accuracy_mean": 0.05303030461072922,
+  "val_accuracy_std": 0.007575757801532745,
+  "timestamp": "20251220_145939",
+  "cv_folds": 2,
+  "cv_repeats": 1
 }
