@@ -1,6 +1,13 @@
-# Gait-Based Person Recognition
+# Gait-Based Person Recognition & Deepfake Detection
 
-Deep learning pipeline for person identification using gait analysis from video. Achieves **98.99% accuracy** on 13-person dataset.
+Deep learning pipeline for person identification and deepfake detection using gait analysis from video. Achieves **98.99% accuracy** on 13-person dataset.
+
+## Overview
+
+This system uses gait (walking pattern) analysis to:
+1. **Identify individuals** based on their unique walking patterns
+2. **Detect deepfakes** by flagging videos where gait doesn't match any known person
+3. **Verify identity claims** by comparing gait against claimed identity
 
 ## Setup
 
@@ -64,58 +71,21 @@ python src/preprocessing/preprocess_gait.py --input_glob data/gait_keypoints.csv
 python src/models/train_comprehensive.py --all
 ```
 
-### 4. Evaluate
-
-```bash
-# Full evaluation with visualizations
-python src/models/final_evaluation.py 
-```
-
-### 5. Run Detection
+### 4. Run Detection
 
 ```bash
 python detect.py path/to/video.mp4
 ```
 
-## Project Structure
+## Testing
 
-```
-├── src/
-│   ├── preprocessing/     # Keypoint extraction & data prep
-│   ├── models/           # Model architectures & training
-│   └── visualization/    # GradCAM & interpretability
-├── data/                 # Videos & processed data (gitignored)
-├── models/               # Trained models (gitignored)
-├── results/              # Metrics & visualizations (gitignored)
-└── detect.py            # Main detection script
+Run the structured test suite:
+
+```bash
+python run_structured_tests.py
 ```
 
-## Models
-
-| Model | Description |
-|-------|-------------|
-| Enhanced_LSTM | 3-layer LSTM with recurrent dropout |
-| Enhanced_BiLSTM | Bidirectional LSTM + attention |
-| CNN_Transformer_V2 | CNN + Transformer (best performer) |
-| MultiScale_CNN | Parallel convolutions (3,5,7 kernels) |
-| ResNet_CNN | 1D ResNet with skip connections |
-
-## Key Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `train_comprehensive.py` | Full training with CV & regularization |
-| `test_models.py` | Test models, per-person accuracy |
-| `final_evaluation.py` | Complete evaluation + visualizations |
-| `build_ensemble.py` | Create ensemble from top models |
-| `hyperparameter_tuning.py` | Grid search with Keras Tuner |
-
-## Results
-
-- **Accuracy**: 98.99%
-- **ROC-AUC**: 99.84%
-- **10/13 persons**: 100% accuracy
-- **Deepfake detection**: Low confidence flagging works
+Results are saved to `structured_test_results.json`.
 
 ## Requirements
 

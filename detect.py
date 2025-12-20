@@ -100,8 +100,8 @@ class GaitDetector:
             min_tracking_confidence=0.5
         )
     
-    def extract_keypoints(self, video_path, max_frames=64):
-        """Extract pose keypoints from video"""
+    def extract_keypoints(self, video_path, max_frames=None):
+        """Extract pose keypoints from video (all frames, no skipping)"""
         cap = cv2.VideoCapture(video_path)
         
         if not cap.isOpened():
@@ -109,22 +109,11 @@ class GaitDetector:
             return None
         
         keypoints_list = []
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        skip_rate = max(1, total_frames // max_frames)
         
-        frame_num = 0
-        frames_processed = 0
-        
-        while cap.isOpened() and frames_processed < max_frames:
+        while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
-            
-            frame_num += 1
-            if frame_num % skip_rate != 0:
-                continue
-            
-            frames_processed += 1
             
             try:
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -277,15 +266,36 @@ class GaitDetector:
             # Get predicted identity
             predicted_identity = self.id_to_name.get(prediction, f"Person_{prediction}")
             
-            # Determine if authentic
-            # LOW confidence = likely synthetic/deepfake (doesn't match any real person well)
+            # Detection Logic:
+            # 1. LOW CONFIDENCE = Possible synthetic/deepfake (doesn't match any known person well)
+            # 2. IDENTITY MISMATCH = Possible deepfake/impersonation (gait doesn't match claimed identity)
+            # 3. Both conditions = NOT AUTHENTIC
+            
             is_low_confidence = confidence < threshold
             
             if claimed_identity:
-                is_authentic = (predicted_identity.lower() == claimed_identity.lower()) and not is_low_confidence
+                # VERIFICATION MODE: Check if gait matches claimed identity
+                identity_matches = (predicted_identity.lower() == claimed_identity.lower())
+                is_identity_mismatch = not identity_matches
+                
+                # Authentic ONLY if: identity matches AND confidence is high enough
+                is_authentic = identity_matches and not is_low_confidence
+                
+                # Determine rejection reason
+                if is_identity_mismatch and is_low_confidence:
+                    rejection_reason = "IDENTITY_MISMATCH_AND_LOW_CONFIDENCE"
+                elif is_identity_mismatch:
+                    rejection_reason = "IDENTITY_MISMATCH"  # Likely deepfake or impersonation
+                elif is_low_confidence:
+                    rejection_reason = "LOW_CONFIDENCE"  # Possible synthetic video
+                else:
+                    rejection_reason = None
             else:
-                # No claim - but still flag if confidence is suspiciously low
+                # CLASSIFICATION MODE (no claim): Just identify the person
+                # Flag as suspicious only if confidence is low
+                is_identity_mismatch = False
                 is_authentic = not is_low_confidence
+                rejection_reason = "LOW_CONFIDENCE" if is_low_confidence else None
             
             result = {
                 "video_path": video_path,
@@ -295,24 +305,32 @@ class GaitDetector:
                 "threshold": threshold,
                 "is_authentic": is_authentic,
                 "is_low_confidence": is_low_confidence,
+                "is_identity_mismatch": is_identity_mismatch if claimed_identity else None,
+                "rejection_reason": rejection_reason,
                 "frames_analyzed": len(keypoints),
                 "timestamp": datetime.now().isoformat()
             }
             
-            if is_low_confidence:
-                result["warning"] = "LOW CONFIDENCE - Possible synthetic/deepfake video"
-                print(f"   ⚠️ [SUSPICIOUS] Low confidence ({confidence:.2%}) - Possible DEEPFAKE")
-                print(f"      Gait doesn't strongly match any known person")
-            
+            # Print results
             if claimed_identity:
                 result["claimed_identity"] = claimed_identity
                 if is_authentic:
                     print(f"   ✅ [AUTHENTIC] Matches claimed identity: {claimed_identity} (confidence: {confidence:.2%})")
-                elif not is_low_confidence:
-                    print(f"   ⚠️ [IDENTITY MISMATCH] Predicted: {predicted_identity}, Claimed: {claimed_identity}")
-                # Low confidence case already printed above
-            elif not is_low_confidence:
-                print(f"   Identified as: {predicted_identity} (confidence: {confidence:.2%})")
+                else:
+                    if rejection_reason == "IDENTITY_MISMATCH":
+                        print(f"   ❌ [DEEPFAKE/IMPERSONATION] Gait is {predicted_identity}, not {claimed_identity} (confidence: {confidence:.2%})")
+                    elif rejection_reason == "LOW_CONFIDENCE":
+                        print(f"   ❌ [SUSPICIOUS] Low confidence ({confidence:.2%}) - Possible synthetic video")
+                    else:
+                        print(f"   ❌ [REJECTED] Mismatch + Low confidence: {predicted_identity} ({confidence:.2%}), claimed {claimed_identity}")
+            else:
+                # No identity claim - just classification
+                if is_low_confidence:
+                    result["warning"] = "LOW CONFIDENCE - Possible synthetic/deepfake video"
+                    print(f"   ⚠️ [SUSPICIOUS] Low confidence ({confidence:.2%}) - Possible DEEPFAKE")
+                    print(f"      Best match: {predicted_identity}, but gait doesn't strongly match any known person")
+                else:
+                    print(f"   Identified as: {predicted_identity} (confidence: {confidence:.2%})")
             
             return result
             
