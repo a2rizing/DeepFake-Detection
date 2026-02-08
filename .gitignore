@@ -44,28 +44,37 @@ htmlcov/
 *.avi
 *.mov
 *.mkv
+*.flv
+*.wmv
 
-# Data directories (large)
+# Data directories and files (large)
 data/videos/
-data/videos_augmented/
 data/deepfake/
-data/processed/
-data/processed_augmented/
-*.npy
-*.npz
-
-# CSV files managed by Git LFS
-data/gait_keypoints.csv
-data/gait_keypoints_augmented.csv
+data/augmented_videos/
+data/gait_features/
+data/*.npy
+data/*.npz
+data/*.pkl
 
 # Model files (large, retrain instead)
-models/
-*.keras
-*.h5
-*.pkl
-*.joblib
-*.pth
-*.pt
+models/*.pth
+models/*.pt
+models/*.h5
+models/*.keras
+models/*.joblib
+models/*.pkl
 
-# Results (regenerate with scripts)
+# Results and outputs (regenerate with scripts)
+outputs/checkpoints/
+outputs/tensorboard/
+outputs/evaluation/
+outputs/loocv/
+outputs/training_history.json
+outputs/model_config.json
 results/
+output/
+logs/
+
+# Checkpoints
+checkpoints/
+*.ckpt
